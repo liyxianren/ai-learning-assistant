@@ -1,0 +1,44 @@
+[
+  {
+    "id": "a36b7f7a-c146-4f15-864a-6a04f1174d21",
+    "username": "刘小赛",
+    "password": "bcb15f821479b4d5772bd0ca866c00ad5f926e3580720659cc80d39c9d09802a",
+    "createdAt": "2026-02-03T12:10:47.891Z",
+    "lastLoginAt": "2026-02-03T12:16:26.597Z"
+  },
+  {
+    "id": "07cbe2ef-6e32-4564-9dd7-910ed9a328c3",
+    "username": "testuser",
+    "password": "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
+    "createdAt": "2026-02-05T10:23:24.721Z",
+    "lastLoginAt": null
+  },
+  {
+    "id": "1487af5d-2d55-4ca2-ad9d-7303c9e14bab",
+    "username": "testuser2",
+    "password": "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
+    "createdAt": "2026-02-05T10:24:09.941Z",
+    "lastLoginAt": null
+  },
+  {
+    "id": "db59a927-da2c-42aa-b7af-c2d6ab9cf6a8",
+    "username": "testuser3",
+    "password": "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
+    "createdAt": "2026-02-05T10:24:54.615Z",
+    "lastLoginAt": null
+  },
+  {
+    "id": "05850905-b485-4607-ada6-b326c6b6c4fa",
+    "username": "testuser4",
+    "password": "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
+    "createdAt": "2026-02-05T10:25:15.916Z",
+    "lastLoginAt": null
+  },
+  {
+    "id": "145e990d-0281-4572-a22d-a82fd7f5c54b",
+    "username": "111",
+    "password": "bcb15f821479b4d5772bd0ca866c00ad5f926e3580720659cc80d39c9d09802a",
+    "createdAt": "2026-02-05T10:25:58.601Z",
+    "lastLoginAt": "2026-02-05T13:12:51.702Z"
+  }
+]

@@ -1,0 +1,34 @@
+# Git
+.git
+.gitignore
+
+# Node.js
+node_modules
+backend/node_modules
+npm-debug.log*
+
+# 环境文件 (不要打包敏感信息，在 Zeabur 控制台配置)
+.env
+.env.*
+backend/.env
+backend/.env.*
+
+# IDE
+.vscode
+.idea
+.trae
+.claude
+
+# 文档
+*.md
+*.docx
+
+# macOS
+.DS_Store
+
+# 临时文件
+*.log
+*.tmp
+
+# Docker Compose (Zeabur 不支持)
+docker-compose*.yml

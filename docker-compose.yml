@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  ai-learning-assistant:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-learning-assistant
+    ports:
+      - "8080:80"
+    environment:
+      # 服务配置
+      - NODE_ENV=production
+      - PORT=3000
+
+      # 智谱 ChatGLM API 密钥 (统一用于文本和图像识别)
+      - CHATGLM_API_KEY=${CHATGLM_API_KEY}
+
+      # 多模态模型配置 (图像识别)
+      # 可选: glm-4.6v (旗舰版), glm-4.6v-flashx (轻量免费版)
+      - MULTIMODAL_MODEL=${MULTIMODAL_MODEL:-glm-4.6v-flashx}
+      # 如需使用其他多模态服务:
+      # - MULTIMODAL_API_KEY=${MULTIMODAL_API_KEY}
+      # - MULTIMODAL_API_URL=${MULTIMODAL_API_URL}
+
+      # 备选模型
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+
+      # JWT 配置
+      - JWT_SECRET=${JWT_SECRET:-ai-learning-assistant-secret}
+
+      # CORS (容器内前端通过 Nginx 代理，所以使用本地地址)
+      - CORS_ORIGIN=http://localhost
+
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
