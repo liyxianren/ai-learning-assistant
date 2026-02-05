@@ -27,9 +27,7 @@ COPY backend/data ./data
 RUN rm -rf /usr/share/nginx/html/*
 
 # 复制前端静态文件
-COPY css/ /usr/share/nginx/html/css/
-COPY js/ /usr/share/nginx/html/js/
-COPY *.html /usr/share/nginx/html/
+COPY frontend/ /usr/share/nginx/html/
 
 # ===== Nginx 配置模板 (支持动态端口) =====
 RUN cat > /etc/nginx/nginx.conf.template <<'EOF'

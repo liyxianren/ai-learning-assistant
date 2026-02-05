@@ -196,9 +196,11 @@ const UserManager = {
         this.removeToken();
         this.removeUser();
 
-        // 刷新页面或跳转
-        if (window.location.pathname !== '/' && window.location.pathname !== '/index.html') {
-            window.location.href = '/';
+        // 登出后跳转到首页
+        if (window.location.pathname !== '/home.html' && window.location.pathname !== '/') {
+            window.location.href = '/home.html';
+        } else {
+            window.location.reload();
         }
     },
 
