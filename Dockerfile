@@ -9,7 +9,7 @@ FROM node:18-alpine
 RUN apk add --no-cache nginx supervisor gettext
 
 # 创建必要目录
-RUN mkdir -p /var/log/supervisor /run/nginx /app/backend
+RUN mkdir -p /var/log/supervisor /run/nginx /app/backend /etc/supervisor/conf.d
 
 # ===== 后端设置 =====
 WORKDIR /app/backend
