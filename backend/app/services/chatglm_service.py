@@ -72,6 +72,104 @@ class ChatGLMService:
         return [part.strip(" -•*") for part in parts if part.strip(" -•*")]
 
     @staticmethod
+    def _empty_solution_result() -> Dict:
+        return {
+            "thinking": "",
+            "steps": [],
+            "answer": "",
+            "summary": "",
+        }
+
+    @staticmethod
+    def _normalize_steps_field(value) -> list[str]:
+        if value is None:
+            return []
+
+        raw_lines: list[str] = []
+
+        if isinstance(value, list):
+            for item in value:
+                text = ChatGLMService._normalize_text_content(item)
+                if not text:
+                    continue
+                raw_lines.extend(text.splitlines() or [text])
+        else:
+            text = ChatGLMService._normalize_text_content(value)
+            if not text:
+                return []
+            raw_lines = text.splitlines() or [text]
+
+        cleaned_steps = []
+        for line in raw_lines:
+            cleaned = re.sub(
+                r"^\s*(?:[-*•]|\d+[\.、\)]|第[一二三四五六七八九十百零\d]+步)\s*",
+                "",
+                line,
+            ).strip()
+            if cleaned:
+                cleaned_steps.append(cleaned)
+
+        if cleaned_steps:
+            return cleaned_steps
+
+        text = ChatGLMService._normalize_text_content(value)
+        return [item.strip() for item in re.split(r"[。；;\n]+", text) if item.strip()]
+
+    @staticmethod
+    def _coerce_solution_result(data) -> Dict:
+        result = ChatGLMService._empty_solution_result()
+        if not isinstance(data, dict):
+            return result
+
+        def _pick(*keys):
+            for key in keys:
+                if key in data and data.get(key) is not None:
+                    return data.get(key)
+            return None
+
+        thinking_raw = _pick("thinking", "analysis", "thought", "解题思路", "思路")
+        steps_raw = _pick("steps", "detailedSteps", "solutionSteps", "详细步骤", "解题步骤", "步骤")
+        answer_raw = _pick("answer", "finalAnswer", "final_answer", "最终答案", "答案")
+        summary_raw = _pick(
+            "summary",
+            "knowledgeSummary",
+            "knowledge_summary",
+            "知识总结",
+            "知识点总结",
+            "学习总结",
+            "总结",
+        )
+
+        result["thinking"] = ChatGLMService._normalize_text_content(thinking_raw)
+        result["steps"] = ChatGLMService._normalize_steps_field(steps_raw)
+        result["answer"] = ChatGLMService._normalize_text_content(answer_raw)
+        result["summary"] = ChatGLMService._normalize_text_content(summary_raw)
+        return result
+
+    @staticmethod
+    def _has_solution_content(result: Dict) -> bool:
+        return bool(
+            result.get("thinking")
+            or result.get("steps")
+            or result.get("answer")
+            or result.get("summary")
+        )
+
+    @staticmethod
+    def _merge_solution_result(primary: Dict, fallback: Dict) -> Dict:
+        merged = ChatGLMService._empty_solution_result()
+        merged["thinking"] = str(primary.get("thinking") or fallback.get("thinking") or "").strip()
+
+        primary_steps = primary.get("steps") if isinstance(primary.get("steps"), list) else []
+        fallback_steps = fallback.get("steps") if isinstance(fallback.get("steps"), list) else []
+        merged["steps"] = primary_steps if primary_steps else fallback_steps
+        merged["steps"] = [str(item).strip() for item in merged["steps"] if str(item).strip()]
+
+        merged["answer"] = str(primary.get("answer") or fallback.get("answer") or "").strip()
+        merged["summary"] = str(primary.get("summary") or fallback.get("summary") or "").strip()
+        return merged
+
+    @staticmethod
     def _infer_type(text: str) -> str:
         normalized = text or ""
         if any(keyword in normalized for keyword in ("判断", "对错", "正确吗", "错误吗")):
@@ -224,7 +322,7 @@ class ChatGLMService:
                 {"role": "user", "content": self._build_parse_prompt(text)},
             ],
             "temperature": 0.1,
-            "max_tokens": 1024,
+            "max_tokens": 1600,
         }
 
         if current_app.config.get("CHATGLM_ENABLE_THINKING"):
@@ -256,7 +354,7 @@ class ChatGLMService:
         else:
             knowledge_text = str(knowledge_points)
 
-        prompt = f"""你是一位耐心的 AI 教师，请为学生提供详细的解答。
+        prompt = f"""你是一位耐心的 AI 教师，请为学生提供详细解答。
 
 题目：{text}
 
@@ -265,33 +363,30 @@ class ChatGLMService:
 知识点：{knowledge_text}
 难度等级：{parse_result.get('difficulty', '')}
 
-请按以下格式输出解答：
+请严格输出 JSON（不要 markdown 代码块、不要额外说明），字段必须齐全：
 
-【解题思路】
-分析题目的解题思路和方法
+{{
+    "thinking": "解题思路（1-3段）",
+    "steps": ["步骤1", "步骤2", "步骤3"],
+    "answer": "最终答案（简洁明确）",
+    "summary": "知识总结（可迁移的方法与易错点）"
+}}
 
-【详细步骤】
-1. 步骤一
-2. 步骤二
-3. 步骤三
-...
-
-【最终答案】
-给出简洁明确的答案
-
-【知识总结】
-总结本题涉及的知识点和解题技巧"""
+要求：
+1. steps 必须是字符串数组，至少 2 步；
+2. answer 只保留最终结论，不要重复完整推导；
+3. summary 必须总结方法与易错点，不要留空。"""
 
         request_data = {
             "model": current_app.config.get("CHATGLM_MODEL", "glm-4.7-flashx"),
             "messages": [
                 {
                     "role": "system",
-                    "content": "你是一位优秀的 AI 教师，擅长用清晰、易懂的方式讲解题目。你会引导学生思考，不仅给出答案，还会解释为什么这样做。",
+                    "content": "你是一位优秀的 AI 教师。你必须只输出纯 JSON，禁止输出 markdown 代码块和额外说明。",
                 },
                 {"role": "user", "content": prompt},
             ],
-            "temperature": 0.7,
+            "temperature": 0.2,
             "max_tokens": 1024,
         }
 
@@ -407,19 +502,14 @@ class ChatGLMService:
             raise APIError(f"解析结果格式错误: {exc}", 500) from exc
 
     @staticmethod
-    def parse_solution_content(content: str) -> Dict:
-        result = {
-            "thinking": "",
-            "steps": [],
-            "answer": "",
-            "summary": "",
-        }
+    def _extract_solution_sections(text: str) -> Dict:
+        result = ChatGLMService._empty_solution_result()
 
-        text = ChatGLMService._normalize_text_content(content)
-        if not text:
-            return result
-
-        heading_line = r"\n\s*(?:#{1,6}\s*)?(?:【\s*)?(?:解题思路|详细步骤|解题步骤|步骤|最终答案|答案|知识总结|总结)(?:\s*】)?\s*[:：]?"
+        heading_line = (
+            r"\n\s*(?:#{1,6}\s*)?(?:【\s*)?"
+            r"(?:解题思路|详细步骤|解题步骤|步骤|最终答案|答案|知识总结|知识点总结|学习总结|总结)"
+            r"(?:\s*】)?\s*[:：]?"
+        )
 
         def _extract_section(aliases: str) -> str:
             pattern = (
@@ -435,35 +525,30 @@ class ChatGLMService:
         result["thinking"] = _extract_section("解题思路")
         steps_text = _extract_section("详细步骤|解题步骤|步骤")
         result["answer"] = _extract_section("最终答案|答案")
-        result["summary"] = _extract_section("知识总结|总结")
+        result["summary"] = _extract_section("知识总结|知识点总结|学习总结|总结")
 
         if steps_text:
-            parsed_steps = []
-            for line in steps_text.splitlines():
-                cleaned = re.sub(r"^\s*(?:[-*•]|\d+[\.、\)]|第[一二三四五六七八九十百零\d]+步)\s*", "", line).strip()
-                if cleaned:
-                    parsed_steps.append(cleaned)
-            if not parsed_steps:
-                parsed_steps = [item.strip() for item in re.split(r"[。；;\n]+", steps_text) if item.strip()]
-            result["steps"] = parsed_steps
+            result["steps"] = ChatGLMService._normalize_steps_field(steps_text)
 
         # 兜底：模型未按模板输出时，尽量把正文映射到可展示结构
-        if not result["thinking"] and not result["steps"] and not result["answer"] and not result["summary"]:
+        if not ChatGLMService._has_solution_content(result):
             paragraphs = [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
             if paragraphs:
                 result["thinking"] = paragraphs[0]
                 if len(paragraphs) > 1:
                     result["summary"] = paragraphs[-1]
                 middle = paragraphs[1:-1] if len(paragraphs) > 2 else paragraphs[1:]
-                result["steps"] = middle
+                result["steps"] = [item for item in middle if item]
 
             numbered_lines = []
             for line in text.splitlines():
                 stripped = line.strip()
                 if re.match(r"^(?:\d+[\.、\)]|[-*•])\s*", stripped):
-                    numbered_lines.append(re.sub(r"^(?:\d+[\.、\)]|[-*•])\s*", "", stripped).strip())
+                    cleaned = re.sub(r"^(?:\d+[\.、\)]|[-*•])\s*", "", stripped).strip()
+                    if cleaned:
+                        numbered_lines.append(cleaned)
             if numbered_lines and not result["steps"]:
-                result["steps"] = [line for line in numbered_lines if line]
+                result["steps"] = numbered_lines
 
         if not result["answer"]:
             answer_inline = re.search(r"(?:最终答案|答案)\s*[:：]\s*(.+)", text)
@@ -472,6 +557,49 @@ class ChatGLMService:
             elif result["steps"]:
                 result["answer"] = str(result["steps"][-1]).strip()
 
+        if not result["summary"]:
+            summary_inline = re.search(r"(?:知识总结|知识点总结|学习总结|总结)\s*[:：]\s*(.+)", text)
+            if summary_inline:
+                result["summary"] = summary_inline.group(1).strip()
+            else:
+                paragraphs = [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
+                if len(paragraphs) > 1:
+                    tail = paragraphs[-1]
+                    if tail and tail != result["answer"]:
+                        result["summary"] = tail
+
+        result["steps"] = [str(item).strip() for item in result["steps"] if str(item).strip()]
+        return result
+
+    @staticmethod
+    def parse_solution_content(content: str) -> Dict:
+        text = ChatGLMService._normalize_text_content(content)
+        if not text:
+            return ChatGLMService._empty_solution_result()
+
+        json_result = ChatGLMService._empty_solution_result()
+        try:
+            parsed = ChatGLMService._extract_json(text)
+            json_result = ChatGLMService._coerce_solution_result(parsed)
+        except APIError:
+            json_result = ChatGLMService._empty_solution_result()
+
+        section_result = ChatGLMService._extract_solution_sections(text)
+        if ChatGLMService._has_solution_content(json_result):
+            result = ChatGLMService._merge_solution_result(json_result, section_result)
+        else:
+            result = section_result
+
+        if not result["answer"] and result["steps"]:
+            result["answer"] = str(result["steps"][-1]).strip()
+
+        if not result["summary"]:
+            if result["thinking"] and result["thinking"] != result["answer"]:
+                result["summary"] = result["thinking"]
+            elif result["answer"]:
+                result["summary"] = result["answer"]
+
+        result["steps"] = [str(item).strip() for item in result["steps"] if str(item).strip()]
         return result
 
     def health_check(self) -> bool:

@@ -19,6 +19,6 @@ COPY supervisord.conf /etc/supervisor/conf.d/app.conf
 
 RUN rm -f /etc/nginx/sites-enabled/default
 
-EXPOSE 80
+EXPOSE 8080
 
 CMD ["supervisord", "-n", "-c", "/etc/supervisor/conf.d/app.conf"]

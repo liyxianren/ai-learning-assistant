@@ -556,23 +556,39 @@ function showParseResult() {
 
 function showSolutionResult() {
     const solution = AppState.solution || {};
-    
-    DOM.solutionThinking.innerHTML = renderMarkdown(solution.thinking);
+
+    const thinkingText = normalizeSolutionText(solution.thinking);
+    DOM.solutionThinking.innerHTML = renderMarkdown(thinkingText || '暂未生成解题思路，请重试。');
     DOM.solutionThinking.classList.add('markdown-content');
-    
-    const steps = Array.isArray(solution.steps) ? solution.steps : [];
-    DOM.solutionSteps.innerHTML = steps
-        .map((step, index) => `
-            <div class="solution-step">
-                <p class="solution-step-title">步骤 ${index + 1}</p>
-                <div class="markdown-content">${renderMarkdown(step)}</div>
-            </div>
-        `)
-        .join('');
-    
-    DOM.solutionAnswer.innerHTML = renderMarkdown(solution.answer);
+
+    const steps = (Array.isArray(solution.steps) ? solution.steps : [])
+        .map(step => normalizeSolutionText(step))
+        .filter(Boolean);
+
+    DOM.solutionSteps.innerHTML = steps.length > 0
+        ? steps
+            .map((step, index) => `
+                <div class="solution-step">
+                    <p class="solution-step-title">步骤 ${index + 1}</p>
+                    <div class="markdown-content">${renderMarkdown(step)}</div>
+                </div>
+            `)
+            .join('')
+        : '<p class="markdown-content">暂未生成详细步骤，请重试或简化题目后再次生成。</p>';
+
+    let answerText = normalizeSolutionText(solution.answer);
+    if (!answerText && steps.length > 0) {
+        answerText = steps[steps.length - 1];
+    }
+
+    let summaryText = normalizeSolutionText(solution.summary);
+    if (!summaryText && thinkingText && thinkingText !== answerText) {
+        summaryText = thinkingText;
+    }
+
+    DOM.solutionAnswer.innerHTML = renderMarkdown(answerText || '暂未生成最终答案，请重试。');
     DOM.solutionAnswer.classList.add('markdown-content');
-    DOM.solutionSummary.innerHTML = renderMarkdown(solution.summary);
+    DOM.solutionSummary.innerHTML = renderMarkdown(summaryText || '暂未生成知识总结，请重试。');
     DOM.solutionSummary.classList.add('markdown-content');
 }
 
@@ -821,6 +837,32 @@ function normalizeRecognizedText(value) {
             return JSON.stringify(value);
         } catch (e) {
             return String(value);
+        }
+    }
+
+    return value == null ? '' : String(value).trim();
+}
+
+function normalizeSolutionText(value) {
+    if (typeof value === 'string') {
+        return value.trim();
+    }
+
+    if (Array.isArray(value)) {
+        return value
+            .map(item => normalizeSolutionText(item))
+            .filter(Boolean)
+            .join('\n')
+            .trim();
+    }
+
+    if (value && typeof value === 'object') {
+        if (typeof value.text === 'string') return value.text.trim();
+        if (typeof value.content === 'string') return value.content.trim();
+        try {
+            return JSON.stringify(value);
+        } catch (e) {
+            return String(value).trim();
         }
     }
 
