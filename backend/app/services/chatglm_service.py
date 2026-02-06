@@ -170,6 +170,109 @@ class ChatGLMService:
         return merged
 
     @staticmethod
+    def _looks_like_json_solution_text(text: str) -> bool:
+        source = (text or "").strip()
+        if not source:
+            return False
+        if source.startswith("{") or source.startswith("```json"):
+            return True
+        return any(
+            marker in source
+            for marker in (
+                '"thinking"',
+                '"steps"',
+                '"answer"',
+                '"summary"',
+                "'thinking'",
+                "'steps'",
+                "'answer'",
+                "'summary'",
+            )
+        )
+
+    @staticmethod
+    def _unescape_json_string(text: str) -> str:
+        if not text:
+            return ""
+        try:
+            return json.loads(f'"{text}"')
+        except Exception:  # noqa: BLE001
+            return (
+                text.replace('\\"', '"')
+                .replace("\\n", "\n")
+                .replace("\\t", "\t")
+                .replace("\\r", "\r")
+                .strip()
+            )
+
+    @staticmethod
+    def _extract_solution_from_json_like_text(text: str) -> Dict:
+        result = ChatGLMService._empty_solution_result()
+        if not ChatGLMService._looks_like_json_solution_text(text):
+            return result
+
+        source = text.strip()
+
+        def _extract_string_value(keys: str) -> str:
+            pattern = rf"(?:\"|')(?:{keys})(?:\"|')\s*:\s*(?:\"((?:\\.|[^\"\\])*)\"|'((?:\\.|[^'\\])*)')"
+            match = re.search(pattern, source, re.IGNORECASE)
+            if not match:
+                return ""
+            raw_value = match.group(1) if match.group(1) is not None else (match.group(2) or "")
+            return ChatGLMService._unescape_json_string(raw_value).strip()
+
+        result["thinking"] = _extract_string_value("thinking|analysis|thought|解题思路|思路")
+        result["answer"] = _extract_string_value("answer|finalAnswer|final_answer|最终答案|答案")
+        result["summary"] = _extract_string_value(
+            "summary|knowledgeSummary|knowledge_summary|知识总结|知识点总结|学习总结|总结"
+        )
+
+        steps_block_pattern = (
+            r"(?:\"|')(?:steps|detailedSteps|solutionSteps|详细步骤|解题步骤|步骤)(?:\"|')\s*:\s*\[([\s\S]*?)(?:\]|$)"
+        )
+        steps_match = re.search(steps_block_pattern, source, re.IGNORECASE)
+        if steps_match:
+            steps_body = steps_match.group(1)
+            step_items = []
+
+            for raw_item in re.findall(r'"((?:\\.|[^"\\])*)"', steps_body):
+                value = ChatGLMService._unescape_json_string(raw_item).strip()
+                if value:
+                    step_items.append(value)
+
+            if not step_items:
+                for raw_item in re.findall(r"'((?:\\.|[^'\\])*)'", steps_body):
+                    value = ChatGLMService._unescape_json_string(raw_item).strip()
+                    if value:
+                        step_items.append(value)
+
+            result["steps"] = ChatGLMService._normalize_steps_field(step_items)
+
+        return result
+
+    @staticmethod
+    def _infer_answer_from_free_text(text: str) -> str:
+        source = (text or "").strip()
+        if not source:
+            return ""
+
+        patterns = [
+            r"(?:最终答案|答案)\s*[:：]\s*([^\n，,。；;]+)",
+            r"(?:答案是|结果为|可得)\s*([^\s，,。；;]+)",
+            r"(?:等于)\s*([^\s，,。；;]+)",
+            r"=\s*([^\s，,。；;]+)",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, source, re.IGNORECASE)
+            if match:
+                value = (match.group(1) or "").strip().strip("。；;，,")
+                if value:
+                    return value
+
+        return ""
+
+    @staticmethod
     def _infer_type(text: str) -> str:
         normalized = text or ""
         if any(keyword in normalized for keyword in ("判断", "对错", "正确吗", "错误吗")):
@@ -375,14 +478,17 @@ class ChatGLMService:
 要求：
 1. steps 必须是字符串数组，至少 2 步；
 2. answer 只保留最终结论，不要重复完整推导；
-3. summary 必须总结方法与易错点，不要留空。"""
+3. summary 必须总结方法与易错点，不要留空；
+4. thinking / steps / summary 请使用清晰的 Markdown 结构（如标题、列表、加粗）；
+5. 涉及数学表达式时，使用 LaTeX：行内用 $...$，独立公式用 $$...$$；
+6. 仅输出合法 JSON，字段值中的换行必须按 JSON 字符串格式正确转义。"""
 
         request_data = {
             "model": current_app.config.get("CHATGLM_MODEL", "glm-4.7-flashx"),
             "messages": [
                 {
                     "role": "system",
-                    "content": "你是一位优秀的 AI 教师。你必须只输出纯 JSON，禁止输出 markdown 代码块和额外说明。",
+                    "content": "你是一位优秀的 AI 教师。你必须只输出纯 JSON，禁止输出 markdown 代码块和额外说明。JSON 字段内容允许 Markdown 与 LaTeX。",
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -426,7 +532,12 @@ class ChatGLMService:
 所属学科：{parse_result.get('subject', '')}
 知识点：{knowledge_text}
 
-请提供详细的解题思路、步骤、答案和知识总结。"""
+请提供详细的解题思路、步骤、答案和知识总结。
+
+格式要求：
+1. 使用 Markdown 组织内容；
+2. 数学公式使用 LaTeX（行内 $...$，块级 $$...$$）；
+3. 不要输出与答案无关的自我反思。"""
 
         request_data = {
             "model": current_app.config.get("CHATGLM_MODEL", "glm-4.7-flashx"),
@@ -531,7 +642,8 @@ class ChatGLMService:
             result["steps"] = ChatGLMService._normalize_steps_field(steps_text)
 
         # 兜底：模型未按模板输出时，尽量把正文映射到可展示结构
-        if not ChatGLMService._has_solution_content(result):
+        # 若文本本身像 JSON（可能还是半截 JSON），这里不要把整段 JSON 当作思路输出。
+        if not ChatGLMService._has_solution_content(result) and not ChatGLMService._looks_like_json_solution_text(text):
             paragraphs = [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
             if paragraphs:
                 result["thinking"] = paragraphs[0]
@@ -584,14 +696,24 @@ class ChatGLMService:
         except APIError:
             json_result = ChatGLMService._empty_solution_result()
 
+        json_like_result = ChatGLMService._extract_solution_from_json_like_text(text)
         section_result = ChatGLMService._extract_solution_sections(text)
+
         if ChatGLMService._has_solution_content(json_result):
-            result = ChatGLMService._merge_solution_result(json_result, section_result)
+            fallback = ChatGLMService._merge_solution_result(json_like_result, section_result)
+            result = ChatGLMService._merge_solution_result(json_result, fallback)
+        elif ChatGLMService._has_solution_content(json_like_result):
+            result = ChatGLMService._merge_solution_result(json_like_result, section_result)
         else:
             result = section_result
 
         if not result["answer"] and result["steps"]:
             result["answer"] = str(result["steps"][-1]).strip()
+        if not result["answer"]:
+            hint_text = "\n".join(
+                part for part in [text, result.get("thinking", ""), result.get("summary", "")] if part
+            )
+            result["answer"] = ChatGLMService._infer_answer_from_free_text(hint_text)
 
         if not result["summary"]:
             if result["thinking"] and result["thinking"] != result["answer"]:

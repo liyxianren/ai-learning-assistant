@@ -565,8 +565,17 @@ function showSolutionResult() {
         .map(step => normalizeSolutionText(step))
         .filter(Boolean);
 
-    DOM.solutionSteps.innerHTML = steps.length > 0
-        ? steps
+    let displaySteps = steps.slice();
+    if (displaySteps.length === 0 && thinkingText) {
+        displaySteps = thinkingText
+            .split(/[。！？；;\n]+/)
+            .map(item => item.trim())
+            .filter(item => item.length > 3)
+            .slice(0, 6);
+    }
+
+    DOM.solutionSteps.innerHTML = displaySteps.length > 0
+        ? displaySteps
             .map((step, index) => `
                 <div class="solution-step">
                     <p class="solution-step-title">步骤 ${index + 1}</p>
@@ -577,8 +586,8 @@ function showSolutionResult() {
         : '<p class="markdown-content">暂未生成详细步骤，请重试或简化题目后再次生成。</p>';
 
     let answerText = normalizeSolutionText(solution.answer);
-    if (!answerText && steps.length > 0) {
-        answerText = steps[steps.length - 1];
+    if (!answerText && displaySteps.length > 0) {
+        answerText = displaySteps[displaySteps.length - 1];
     }
 
     let summaryText = normalizeSolutionText(solution.summary);
@@ -590,6 +599,12 @@ function showSolutionResult() {
     DOM.solutionAnswer.classList.add('markdown-content');
     DOM.solutionSummary.innerHTML = renderMarkdown(summaryText || '暂未生成知识总结，请重试。');
     DOM.solutionSummary.classList.add('markdown-content');
+
+    // markdown 渲染完成后，再对数学公式进行排版
+    renderMathInContainer(DOM.solutionThinking);
+    renderMathInContainer(DOM.solutionSteps);
+    renderMathInContainer(DOM.solutionAnswer);
+    renderMathInContainer(DOM.solutionSummary);
 }
 
 function hideResults() {
@@ -875,9 +890,54 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-function renderInlineMarkdown(text) {
-    let html = escapeHtml(String(text ?? ''));
+function hasRichMarkdownRenderer() {
+    return typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined';
+}
 
+function hasMathRenderer() {
+    return typeof renderMathInElement === 'function';
+}
+
+function sanitizeRenderedHtml(html) {
+    if (!hasRichMarkdownRenderer()) return html;
+    return DOMPurify.sanitize(html, {
+        USE_PROFILES: { html: true }
+    });
+}
+
+function renderMathInContainer(container) {
+    if (!container || !hasMathRenderer()) return;
+    try {
+        renderMathInElement(container, {
+            delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '\\[', right: '\\]', display: true },
+                { left: '$', right: '$', display: false },
+                { left: '\\(', right: '\\)', display: false }
+            ],
+            throwOnError: false,
+            strict: 'ignore'
+        });
+    } catch (error) {
+        console.warn('LaTeX 渲染失败:', error);
+    }
+}
+
+function renderInlineMarkdown(text) {
+    const source = String(text ?? '').trim();
+    if (!source) return '';
+
+    if (hasRichMarkdownRenderer()) {
+        marked.setOptions({
+            gfm: true,
+            breaks: true
+        });
+        return sanitizeRenderedHtml(marked.parseInline(source));
+    }
+
+    let html = escapeHtml(source);
+
+    // fallback: 轻量行内 markdown 规则
     // 行内代码优先处理，避免被其他规则破坏
     html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
     html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
@@ -888,7 +948,7 @@ function renderInlineMarkdown(text) {
     return html;
 }
 
-function renderMarkdownBlock(block, codeBlocks) {
+function renderMarkdownBlockFallback(block, codeBlocks) {
     const codeTokenMatch = block.match(/^@@CODE_BLOCK_(\d+)@@$/);
     if (codeTokenMatch) {
         const codeBlock = codeBlocks[Number(codeTokenMatch[1])];
@@ -935,6 +995,14 @@ function renderMarkdown(text) {
     const source = String(text ?? '').replace(/\r\n?/g, '\n').trim();
     if (!source) return '';
 
+    if (hasRichMarkdownRenderer()) {
+        marked.setOptions({
+            gfm: true,
+            breaks: true
+        });
+        return sanitizeRenderedHtml(marked.parse(source));
+    }
+
     const codeBlocks = [];
     const withCodeTokens = source.replace(/```([a-zA-Z0-9_-]+)?\n?([\s\S]*?)```/g, (_, lang = '', code = '') => {
         const token = `@@CODE_BLOCK_${codeBlocks.length}@@`;
@@ -947,7 +1015,7 @@ function renderMarkdown(text) {
 
     return withCodeTokens
         .split(/\n{2,}/)
-        .map(block => renderMarkdownBlock(block, codeBlocks))
+        .map(block => renderMarkdownBlockFallback(block, codeBlocks))
         .join('');
 }
 

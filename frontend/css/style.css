@@ -786,8 +786,19 @@ body {
     padding-left: 1.4em;
 }
 
+.markdown-content ul.task-list {
+    list-style: none;
+    padding-left: 0;
+}
+
 .markdown-content li + li {
     margin-top: var(--spacing-xs);
+}
+
+.markdown-content li.task-list-item {
+    display: flex;
+    gap: 0.45em;
+    align-items: flex-start;
 }
 
 .markdown-content h1,
@@ -823,6 +834,35 @@ body {
     background: transparent;
 }
 
+.markdown-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 var(--spacing-sm);
+    display: block;
+    overflow-x: auto;
+}
+
+.markdown-content th,
+.markdown-content td {
+    border: 1px solid var(--border-color);
+    padding: 0.45rem 0.6rem;
+    text-align: left;
+    vertical-align: top;
+    white-space: nowrap;
+}
+
+.markdown-content th {
+    background: var(--bg-secondary);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.markdown-content hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: var(--spacing-md) 0;
+}
+
 .markdown-content blockquote {
     margin: 0 0 var(--spacing-sm);
     padding-left: var(--spacing-md);
@@ -834,6 +874,17 @@ body {
     color: var(--primary-color);
     text-decoration: underline;
     text-underline-offset: 2px;
+}
+
+.markdown-content .katex-display {
+    margin: 0 0 var(--spacing-sm);
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.1rem;
+}
+
+.markdown-content .katex {
+    line-height: 1.5;
 }
 
 .solution-answer {
