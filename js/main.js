@@ -19,15 +19,6 @@ const AppState = {
     currentUser: null
 };
 
-const RAW_API_BASE = window.AppConfig?.API_BASE_URL ?? 'http://localhost:3000';
-const API_BASE = RAW_API_BASE
-    .replace(/\/+$/, '')
-    .replace(/\/api$/, '');
-
-function buildApiUrl(path) {
-    return `${API_BASE}${path}`;
-}
-
 // ========================================
 // DOM 元素引用
 // ========================================
@@ -39,17 +30,17 @@ const DOM = {
     userAvatar: document.getElementById('user-avatar'),
     userName: document.getElementById('user-name'),
     logoutBtn: document.getElementById('logout-btn'),
-
+    
     // Tab 切换
     tabBtns: document.querySelectorAll('.tab-btn'),
     textPanel: document.getElementById('text-panel'),
     imagePanel: document.getElementById('image-panel'),
-
+    
     // 文字输入
     textInput: document.getElementById('text-input'),
     charCount: document.querySelector('.char-count'),
     clearTextBtn: document.getElementById('clear-text'),
-
+    
     // 图片输入
     uploadArea: document.getElementById('upload-area'),
     imageInput: document.getElementById('image-input'),
@@ -57,41 +48,41 @@ const DOM = {
     imagePreview: document.getElementById('image-preview'),
     imageSize: document.getElementById('image-size'),
     removeImageBtn: document.getElementById('remove-image'),
-
+    
     // 提交按钮
     submitBtn: document.getElementById('submit-btn'),
     btnText: document.querySelector('.btn-text'),
     btnLoading: document.querySelector('.btn-loading'),
-
+    
     // 步骤指示器
     progressSection: document.getElementById('progress-section'),
     steps: document.querySelectorAll('.step'),
-
+    
     // 结果展示
     resultSection: document.getElementById('result-section'),
     recognitionCard: document.getElementById('recognition-card'),
     recognizedText: document.getElementById('recognized-text'),
     editRecognitionBtn: document.getElementById('edit-recognition'),
-
+    
     parseCard: document.getElementById('parse-card'),
     parseType: document.getElementById('parse-type'),
     parseSubject: document.getElementById('parse-subject'),
     parseKnowledge: document.getElementById('parse-knowledge'),
     parseDifficulty: document.getElementById('parse-difficulty'),
-
+    
     solutionCard: document.getElementById('solution-card'),
     solutionThinking: document.getElementById('solution-thinking'),
     solutionSteps: document.getElementById('solution-steps'),
     solutionAnswer: document.getElementById('solution-answer'),
     solutionSummary: document.getElementById('solution-summary'),
-
+    
     // 历史记录
     historyBtn: document.getElementById('history-btn'),
     historySidebar: document.getElementById('history-sidebar'),
     closeHistoryBtn: document.getElementById('close-history'),
     historyList: document.getElementById('history-list'),
     overlay: document.getElementById('overlay'),
-
+    
     // 折叠按钮
     toggleBtns: document.querySelectorAll('.toggle-btn')
 };
@@ -120,16 +111,16 @@ function initEventListeners() {
             updateUserDisplay();
         });
     }
-
+    
     // Tab 切换
     DOM.tabBtns.forEach(btn => {
         btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
-
+    
     // 文字输入
     DOM.textInput.addEventListener('input', handleTextInput);
     DOM.clearTextBtn.addEventListener('click', clearText);
-
+    
     // 图片上传
     DOM.uploadArea.addEventListener('click', () => DOM.imageInput.click());
     DOM.uploadArea.addEventListener('dragover', handleDragOver);
@@ -137,23 +128,23 @@ function initEventListeners() {
     DOM.uploadArea.addEventListener('drop', handleDrop);
     DOM.imageInput.addEventListener('change', handleImageSelect);
     DOM.removeImageBtn.addEventListener('click', removeImage);
-
+    
     // 提交按钮
     DOM.submitBtn.addEventListener('click', handleSubmit);
-
+    
     // 历史记录
     DOM.historyBtn.addEventListener('click', openHistory);
     DOM.closeHistoryBtn.addEventListener('click', closeHistory);
     DOM.overlay.addEventListener('click', closeHistory);
-
+    
     // 折叠按钮
     DOM.toggleBtns.forEach(btn => {
         btn.addEventListener('click', () => toggleCard(btn));
     });
-
+    
     // 编辑识别结果
     DOM.editRecognitionBtn.addEventListener('click', editRecognition);
-
+    
     // 键盘快捷键
     document.addEventListener('keydown', handleKeyboard);
 }
@@ -164,19 +155,19 @@ function initEventListeners() {
 
 function switchTab(tab) {
     AppState.currentTab = tab;
-
+    
     // 更新按钮状态
     DOM.tabBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.tab === tab);
     });
-
+    
     // 切换面板
     DOM.textPanel.classList.toggle('active', tab === 'text');
     DOM.imagePanel.classList.toggle('active', tab === 'image');
-
+    
     // 更新提交按钮状态
     updateSubmitButton();
-
+    
     // 隐藏结果区域
     hideResults();
 }
@@ -188,15 +179,15 @@ function switchTab(tab) {
 function handleTextInput() {
     const text = DOM.textInput.value;
     const count = text.length;
-
+    
     DOM.charCount.textContent = `${count} / 2000`;
-
+    
     if (count > 2000) {
         DOM.charCount.style.color = 'var(--error-color)';
     } else {
         DOM.charCount.style.color = 'var(--text-tertiary)';
     }
-
+    
     updateSubmitButton();
 }
 
@@ -227,7 +218,7 @@ function handleDrop(e) {
     e.preventDefault();
     e.stopPropagation();
     DOM.uploadArea.classList.remove('dragover');
-
+    
     const files = e.dataTransfer.files;
     if (files.length > 0) {
         processImage(files[0]);
@@ -247,13 +238,13 @@ function processImage(file) {
         showError('请选择图片文件');
         return;
     }
-
+    
     // 验证文件大小 (5MB)
     if (file.size > 5 * 1024 * 1024) {
         showError('图片大小不能超过 5MB');
         return;
     }
-
+    
     // 读取并压缩图片
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -269,12 +260,12 @@ function processImage(file) {
 function compressImage(img, type) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-
+    
     // 计算压缩后的尺寸
     let width = img.width;
     let height = img.height;
     const maxSize = 1024;
-
+    
     if (width > maxSize || height > maxSize) {
         if (width > height) {
             height = (height / width) * maxSize;
@@ -284,15 +275,15 @@ function compressImage(img, type) {
             height = maxSize;
         }
     }
-
+    
     canvas.width = width;
     canvas.height = height;
     ctx.drawImage(img, 0, 0, width, height);
-
+    
     // 转换为 Base64 (质量 0.8)
     const compressedData = canvas.toDataURL(type, 0.8);
     AppState.imageData = compressedData;
-
+    
     // 显示预览
     showImagePreview(compressedData);
     updateSubmitButton();
@@ -300,26 +291,26 @@ function compressImage(img, type) {
 
 function showImagePreview(dataUrl) {
     DOM.imagePreview.src = dataUrl;
-
+    
     // 计算压缩后的大小
     const sizeInBytes = Math.ceil(dataUrl.length * 0.75);
     const sizeInKB = (sizeInBytes / 1024).toFixed(1);
     DOM.imageSize.textContent = `压缩后: ${sizeInKB} KB`;
-
+    
     DOM.uploadArea.style.display = 'none';
     DOM.imagePreviewWrapper.style.display = 'flex';
 }
 
 function removeImage(e) {
     e.stopPropagation();
-
+    
     AppState.imageData = null;
     DOM.imageInput.value = '';
     DOM.imagePreview.src = '';
-
+    
     DOM.uploadArea.style.display = 'block';
     DOM.imagePreviewWrapper.style.display = 'none';
-
+    
     updateSubmitButton();
 }
 
@@ -331,14 +322,14 @@ function updateUserDisplay() {
     if (UserManager.isLoggedIn()) {
         const user = UserManager.getSavedUser();
         AppState.currentUser = user;
-
+        
         if (DOM.authButtons) DOM.authButtons.style.display = 'none';
         if (DOM.userInfo) DOM.userInfo.style.display = 'flex';
         if (DOM.userName) DOM.userName.textContent = user.username;
         if (DOM.userAvatar) DOM.userAvatar.textContent = user.username.charAt(0).toUpperCase();
     } else {
         AppState.currentUser = null;
-
+        
         if (DOM.authButtons) DOM.authButtons.style.display = 'flex';
         if (DOM.userInfo) DOM.userInfo.style.display = 'none';
     }
@@ -351,24 +342,24 @@ async function initUserState() {
 
 function updateSubmitButton() {
     let canSubmit = false;
-
+    
     if (AppState.currentTab === 'text') {
         canSubmit = DOM.textInput.value.trim().length > 0;
     } else {
         canSubmit = AppState.imageData !== null;
     }
-
+    
     DOM.submitBtn.disabled = !canSubmit || AppState.isProcessing;
 }
 
 async function handleSubmit() {
     if (AppState.isProcessing) return;
-
+    
     AppState.isProcessing = true;
     updateSubmitButton();
     showLoading(true);
     hideResults();
-
+    
     try {
         if (UserManager.isLoggedIn() && AppState.currentTab === 'text') {
             // 登录用户使用完整解题流程（自动保存历史记录）
@@ -381,15 +372,15 @@ async function handleSubmit() {
             } else {
                 await performRecognition();
             }
-
+            
             // 执行解析和解答
             await performParsing();
             await performSolving();
-
+            
             // 保存到历史记录
             saveToHistory();
         }
-
+        
     } catch (error) {
         console.error('处理失败:', error);
         showError(error.message || '处理失败，请重试');
@@ -402,15 +393,15 @@ async function handleSubmit() {
 }
 
 async function solveWithFullPipeline() {
-    const content = AppState.currentTab === 'text'
+    const content = AppState.currentTab === 'text' 
         ? DOM.textInput.value.trim()
         : AppState.imageData;
-
+    
     showProgress(1);
     showProgress(2);
     showProgress(3);
-
-    const response = await fetch(buildApiUrl('/api/solve-problem'), {
+    
+    const response = await fetch('http://localhost:3000/api/solve-problem', {
         method: 'POST',
         headers: UserManager.getHeaders(),
         body: JSON.stringify({
@@ -418,27 +409,27 @@ async function solveWithFullPipeline() {
             content: content
         })
     });
-
+    
     if (!response.ok) {
         throw new Error('解题失败');
     }
-
+    
     const result = await response.json();
-
+    
     if (!result.success) {
         throw new Error(result.error || '解题失败');
     }
-
+    
     // 更新状态
     AppState.recognizedText = result.data.recognizedText;
     AppState.parseResult = result.data.parseResult;
     AppState.solution = result.data.solution;
-
+    
     // 显示结果
     showRecognitionResult();
     showParseResult();
     showSolutionResult();
-
+    
     // 刷新历史记录
     loadHistoryFromServer();
 }
@@ -449,21 +440,21 @@ async function solveWithFullPipeline() {
 
 async function performRecognition() {
     showProgress(1);
-
+    
     // 调用后端 API 进行图像识别
-    const response = await fetch(buildApiUrl('/api/recognize'), {
+    const response = await fetch('http://localhost:3000/api/recognize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: AppState.imageData })
     });
-
+    
     if (!response.ok) throw new Error('识别失败');
-
+    
     const result = await response.json();
     if (!result.success) throw new Error(result.error || '识别失败');
-
+    
     AppState.recognizedText = result.data.text;
-
+    
     showRecognitionResult();
 }
 
@@ -475,48 +466,48 @@ async function skipRecognitionStep() {
 
 async function performParsing() {
     showProgress(2);
-
+    
     // 调用后端 API 进行题目解析
-    const response = await fetch(buildApiUrl('/api/parse'), {
+    const response = await fetch('http://localhost:3000/api/parse', {
         method: 'POST',
         headers: UserManager.getHeaders(),
-        body: JSON.stringify({
+        body: JSON.stringify({ 
             text: AppState.recognizedText,
             userId: AppState.currentUser?.id
         })
     });
-
+    
     if (!response.ok) throw new Error('解析失败');
-
+    
     const result = await response.json();
     if (!result.success) throw new Error(result.error || '解析失败');
-
+    
     AppState.parseResult = result.data;
-
+    
     showParseResult();
 }
 
 async function performSolving() {
     showProgress(3);
-
+    
     // 调用后端 API 生成解答
-    const response = await fetch(buildApiUrl('/api/solve'), {
+    const response = await fetch('http://localhost:3000/api/solve', {
         method: 'POST',
         headers: UserManager.getHeaders(),
-        body: JSON.stringify({
-            text: AppState.recognizedText,
+        body: JSON.stringify({ 
+            text: AppState.recognizedText, 
             parseResult: AppState.parseResult,
             userId: AppState.currentUser?.id
         })
     });
-
+    
     if (!response.ok) throw new Error('解答生成失败');
-
+    
     const result = await response.json();
     if (!result.success) throw new Error(result.error || '解答生成失败');
-
+    
     AppState.solution = result.data;
-
+    
     showSolutionResult();
 }
 
@@ -531,31 +522,31 @@ function showRecognitionResult() {
 
 function showParseResult() {
     const result = AppState.parseResult;
-
+    
     DOM.parseType.textContent = result.type;
     DOM.parseSubject.textContent = result.subject;
-
+    
     // 知识点标签
     DOM.parseKnowledge.innerHTML = result.knowledgePoints
         .map(point => `<span class="parse-tag">${point}</span>`)
         .join('');
-
+    
     // 难度等级
     DOM.parseDifficulty.textContent = result.difficulty;
-    DOM.parseDifficulty.className = 'parse-value difficulty ' +
-        (result.difficulty === '简单' ? 'easy' :
-            result.difficulty === '中等' ? 'medium' : 'hard');
+    DOM.parseDifficulty.className = 'parse-value difficulty ' + 
+        (result.difficulty === '简单' ? 'easy' : 
+         result.difficulty === '中等' ? 'medium' : 'hard');
 }
 
 function showSolutionResult() {
     const solution = AppState.solution;
-
+    
     DOM.solutionThinking.textContent = solution.thinking;
-
+    
     DOM.solutionSteps.innerHTML = solution.steps
         .map((step, index) => `<p><strong>步骤 ${index + 1}:</strong> ${step}</p>`)
         .join('');
-
+    
     DOM.solutionAnswer.textContent = solution.answer;
     DOM.solutionSummary.textContent = solution.summary;
 }
@@ -571,11 +562,11 @@ function hideResults() {
 function showProgress(step) {
     AppState.currentStep = step;
     DOM.progressSection.style.display = 'block';
-
+    
     DOM.steps.forEach((s, index) => {
         const stepNum = index + 1;
         s.classList.remove('active', 'completed');
-
+        
         if (stepNum === step) {
             s.classList.add('active');
         } else if (stepNum < step) {
@@ -605,7 +596,7 @@ function showLoading(show) {
 function toggleCard(btn) {
     const targetId = btn.dataset.target;
     const target = document.getElementById(targetId);
-
+    
     btn.classList.toggle('collapsed');
     target.style.display = btn.classList.contains('collapsed') ? 'none' : 'block';
 }
@@ -646,13 +637,13 @@ function loadHistory() {
 
 async function loadHistoryFromServer() {
     try {
-        const response = await fetch(buildApiUrl('/api/history'), {
+        const response = await fetch('http://localhost:3000/api/history', {
             method: 'GET',
             headers: UserManager.getHeaders()
         });
-
+        
         const result = await response.json();
-
+        
         if (result.success) {
             // 转换为本地格式
             AppState.history = result.data.records.map(record => ({
@@ -677,21 +668,21 @@ function saveToHistory() {
         id: Date.now().toString(),
         timestamp: new Date().toISOString(),
         type: AppState.currentTab,
-        content: AppState.currentTab === 'text'
+        content: AppState.currentTab === 'text' 
             ? DOM.textInput.value.trim().substring(0, 50) + '...'
             : '图片题目',
         recognizedText: AppState.recognizedText,
         parseResult: AppState.parseResult,
         solution: AppState.solution
     };
-
+    
     AppState.history.unshift(item);
-
+    
     // 限制历史记录数量（最多 50 条）
     if (AppState.history.length > 50) {
         AppState.history = AppState.history.slice(0, 50);
     }
-
+    
     // 保存到本地存储
     localStorage.setItem('ai-learning-history', JSON.stringify(AppState.history));
     renderHistory();
@@ -702,14 +693,14 @@ function renderHistory() {
         DOM.historyList.innerHTML = '<p style="text-align: center; color: var(--text-tertiary); padding: 20px;">暂无历史记录</p>';
         return;
     }
-
+    
     DOM.historyList.innerHTML = AppState.history.map(item => `
         <div class="history-item" data-id="${item.id}">
             <div class="history-item-title">${escapeHtml(item.content)}</div>
             <div class="history-item-time">${formatTime(item.timestamp)}</div>
         </div>
     `).join('');
-
+    
     // 绑定点击事件
     DOM.historyList.querySelectorAll('.history-item').forEach(item => {
         item.addEventListener('click', () => loadHistoryItem(parseInt(item.dataset.id)));
@@ -719,19 +710,19 @@ function renderHistory() {
 function loadHistoryItem(id) {
     const item = AppState.history.find(h => h.id === id);
     if (!item) return;
-
+    
     // 恢复数据
     AppState.recognizedText = item.recognizedText;
     AppState.parseResult = item.parseResult;
     AppState.solution = item.solution;
-
+    
     // 显示结果
     showRecognitionResult();
     showParseResult();
     showSolutionResult();
-
+    
     closeHistory();
-
+    
     // 滚动到结果区域
     DOM.resultSection.scrollIntoView({ behavior: 'smooth' });
 }
@@ -759,7 +750,7 @@ function handleKeyboard(e) {
             handleSubmit();
         }
     }
-
+    
     // ESC 关闭历史记录
     if (e.key === 'Escape') {
         closeHistory();
@@ -788,22 +779,22 @@ function formatTime(timestamp) {
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now - date;
-
+    
     // 小于 1 分钟
     if (diff < 60000) {
         return '刚刚';
     }
-
+    
     // 小于 1 小时
     if (diff < 3600000) {
         return `${Math.floor(diff / 60000)} 分钟前`;
     }
-
+    
     // 小于 24 小时
     if (diff < 86400000) {
         return `${Math.floor(diff / 3600000)} 小时前`;
     }
-
+    
     // 大于 24 小时
     return date.toLocaleDateString('zh-CN');
 }
