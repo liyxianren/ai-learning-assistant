@@ -97,7 +97,7 @@ http {
 NGINXCONF
 
 # ===== Supervisor 配置 =====
-RUN cat > /etc/supervisor.d/app.ini <<'SUPCONF'
+RUN cat > /etc/supervisord.conf <<'SUPCONF'
 [supervisord]
 nodaemon=true
 logfile=/dev/null
@@ -113,6 +113,7 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
+priority=10
 
 [program:backend]
 command=node /app/backend/src/app.js
@@ -124,6 +125,8 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 environment=NODE_ENV="production",PORT="3000"
+priority=20
+startsecs=5
 SUPCONF
 
 # ===== 启动脚本 =====
@@ -145,7 +148,16 @@ window.AppConfig = {
 CONFIG
 
 echo "前端配置已生成"
-echo "启动服务..."
+
+# 确保数据目录存在
+mkdir -p /app/backend/data
+
+# 如果数据文件不存在，创建空的 JSON 文件
+[ -f /app/backend/data/users.json ] || echo '[]' > /app/backend/data/users.json
+[ -f /app/backend/data/history.json ] || echo '[]' > /app/backend/data/history.json
+
+echo "数据目录已准备"
+echo "启动 Supervisor..."
 
 exec supervisord -c /etc/supervisord.conf
 SCRIPT
