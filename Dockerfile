@@ -6,7 +6,7 @@
 FROM node:18-alpine
 
 # 安装 Nginx 和 Supervisor
-RUN apk add --no-cache nginx supervisor gettext
+RUN apk add --no-cache nginx supervisor
 
 # 创建必要目录
 RUN mkdir -p /var/log/supervisor /run/nginx /app/backend /etc/supervisor/conf.d
@@ -31,7 +31,7 @@ COPY css/ /usr/share/nginx/html/css/
 COPY js/ /usr/share/nginx/html/js/
 COPY *.html /usr/share/nginx/html/
 
-# ===== Nginx 配置模板 (支持动态端口) =====
+# ===== Nginx 配置模板 =====
 RUN cat > /etc/nginx/nginx.conf.template <<'EOF'
 worker_processes auto;
 error_log /dev/stderr warn;
@@ -59,7 +59,9 @@ http {
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
 
     server {
-        listen ${PORT};
+        listen 80;
+        listen 8080;
+        listen 3000;
         server_name localhost;
 
         root /usr/share/nginx/html;
@@ -72,7 +74,7 @@ http {
 
         # API 反向代理到 Node.js 后端
         location /api {
-            proxy_pass http://127.0.0.1:3000;
+            proxy_pass http://127.0.0.1:3001;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -125,7 +127,7 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-environment=NODE_ENV="production",PORT="3000"
+environment=NODE_ENV="production",PORT="3001"
 EOF
 
 # ===== 启动脚本 =====
@@ -133,16 +135,14 @@ RUN cat > /docker-entrypoint.sh <<'SCRIPT'
 #!/bin/sh
 set -e
 
-# Zeabur 使用 PORT 环境变量，默认 8080
-export PORT=${PORT:-8080}
-
 echo "=========================================="
 echo "  AI 学习助手 启动中..."
-echo "  监听端口: $PORT"
+echo "  Nginx 监听端口: 80 / 8080 / 3000"
+echo "  Backend 监听端口: 3001"
 echo "=========================================="
 
-# 使用 envsubst 替换 Nginx 配置中的端口变量
-envsubst '${PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+# 生成 Nginx 配置
+cp /etc/nginx/nginx.conf.template /etc/nginx/nginx.conf
 
 # 注入前端配置 - 使用相对路径 (通过 Nginx 代理)
 cat > /usr/share/nginx/html/js/config.js <<CONFIG
@@ -163,7 +163,7 @@ EXPOSE 8080
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget -q --spider http://localhost:${PORT:-8080}/api/health || exit 1
+    CMD wget -q --spider http://localhost:8080/api/health || wget -q --spider http://localhost:3000/api/health || wget -q --spider http://localhost:80/api/health || exit 1
 
 # 启动
 ENTRYPOINT ["/docker-entrypoint.sh"]
