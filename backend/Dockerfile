@@ -1,13 +1,12 @@
-# Build Stage
-FROM node:18-alpine AS builder
+FROM python:3.12-slim
+
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY . .
 
-# Production Stage
-FROM node:18-alpine
-WORKDIR /app
-COPY --from=builder /app ./
 EXPOSE 3000
-CMD ["npm", "start"]
+
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "wsgi:app"]
