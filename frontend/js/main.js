@@ -401,7 +401,7 @@ async function solveWithFullPipeline() {
     showProgress(2);
     showProgress(3);
     
-    const response = await fetch('http://localhost:3000/api/solve-problem', {
+    const response = await fetch(`${API_BASE}/api/solve-problem`, {
         method: 'POST',
         headers: UserManager.getHeaders(),
         body: JSON.stringify({
@@ -442,7 +442,7 @@ async function performRecognition() {
     showProgress(1);
     
     // 调用后端 API 进行图像识别
-    const response = await fetch('http://localhost:3000/api/recognize', {
+    const response = await fetch(`${API_BASE}/api/recognize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: AppState.imageData })
@@ -468,7 +468,7 @@ async function performParsing() {
     showProgress(2);
     
     // 调用后端 API 进行题目解析
-    const response = await fetch('http://localhost:3000/api/parse', {
+    const response = await fetch(`${API_BASE}/api/parse`, {
         method: 'POST',
         headers: UserManager.getHeaders(),
         body: JSON.stringify({ 
@@ -491,7 +491,7 @@ async function performSolving() {
     showProgress(3);
     
     // 调用后端 API 生成解答
-    const response = await fetch('http://localhost:3000/api/solve', {
+    const response = await fetch(`${API_BASE}/api/solve`, {
         method: 'POST',
         headers: UserManager.getHeaders(),
         body: JSON.stringify({ 
@@ -637,7 +637,7 @@ function loadHistory() {
 
 async function loadHistoryFromServer() {
     try {
-        const response = await fetch('http://localhost:3000/api/history', {
+        const response = await fetch(`${API_BASE}/api/history`, {
             method: 'GET',
             headers: UserManager.getHeaders()
         });

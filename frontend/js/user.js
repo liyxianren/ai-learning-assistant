@@ -3,7 +3,7 @@
  * 处理用户认证、登录状态等
  */
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = '';
 
 const UserManager = {
     tokenKey: 'ai_learning_assistant_token',
