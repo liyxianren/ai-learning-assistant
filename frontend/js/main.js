@@ -19,6 +19,15 @@ const AppState = {
     currentUser: null
 };
 
+const RAW_API_BASE = window.AppConfig?.API_BASE_URL ?? 'http://localhost:3000';
+const API_BASE = RAW_API_BASE
+    .replace(/\/+$/, '')
+    .replace(/\/api$/, '');
+
+function buildApiUrl(path) {
+    return `${API_BASE}${path}`;
+}
+
 // ========================================
 // DOM 元素引用
 // ========================================
@@ -401,8 +410,7 @@ async function solveWithFullPipeline() {
     showProgress(2);
     showProgress(3);
 
-    const baseUrl = window.AppConfig?.API_BASE_URL ?? 'http://localhost:3000';
-    const response = await fetch(`${baseUrl}/api/solve-problem`, {
+    const response = await fetch(buildApiUrl('/api/solve-problem'), {
         method: 'POST',
         headers: UserManager.getHeaders(),
         body: JSON.stringify({
@@ -442,9 +450,8 @@ async function solveWithFullPipeline() {
 async function performRecognition() {
     showProgress(1);
 
-    const baseUrl = window.AppConfig?.API_BASE_URL ?? 'http://localhost:3000';
     // 调用后端 API 进行图像识别
-    const response = await fetch(`${baseUrl}/api/recognize`, {
+    const response = await fetch(buildApiUrl('/api/recognize'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: AppState.imageData })
@@ -469,9 +476,8 @@ async function skipRecognitionStep() {
 async function performParsing() {
     showProgress(2);
 
-    const baseUrl = window.AppConfig?.API_BASE_URL ?? 'http://localhost:3000';
     // 调用后端 API 进行题目解析
-    const response = await fetch(`${baseUrl}/api/parse`, {
+    const response = await fetch(buildApiUrl('/api/parse'), {
         method: 'POST',
         headers: UserManager.getHeaders(),
         body: JSON.stringify({
@@ -493,9 +499,8 @@ async function performParsing() {
 async function performSolving() {
     showProgress(3);
 
-    const baseUrl = window.AppConfig?.API_BASE_URL ?? 'http://localhost:3000';
     // 调用后端 API 生成解答
-    const response = await fetch(`${baseUrl}/api/solve`, {
+    const response = await fetch(buildApiUrl('/api/solve'), {
         method: 'POST',
         headers: UserManager.getHeaders(),
         body: JSON.stringify({
@@ -641,8 +646,7 @@ function loadHistory() {
 
 async function loadHistoryFromServer() {
     try {
-        const baseUrl = window.AppConfig?.API_BASE_URL ?? 'http://localhost:3000';
-        const response = await fetch(`${baseUrl}/api/history`, {
+        const response = await fetch(buildApiUrl('/api/history'), {
             method: 'GET',
             headers: UserManager.getHeaders()
         });

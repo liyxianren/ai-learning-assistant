@@ -3,7 +3,14 @@
  * 处理用户认证、登录状态等
  */
 
-const API_BASE = window.AppConfig?.API_BASE_URL ?? 'http://localhost:3000';
+const RAW_API_BASE = window.AppConfig?.API_BASE_URL ?? 'http://localhost:3000';
+const API_BASE = RAW_API_BASE
+    .replace(/\/+$/, '')
+    .replace(/\/api$/, '');
+
+function buildApiUrl(path) {
+    return `${API_BASE}${path}`;
+}
 
 const UserManager = {
     tokenKey: 'ai_learning_assistant_token',
@@ -83,7 +90,7 @@ const UserManager = {
      */
     async sendVerificationCode(username) {
         try {
-            const response = await fetch(`${API_BASE}/api/auth/send-code`, {
+            const response = await fetch(buildApiUrl('/api/auth/send-code'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username })
@@ -104,7 +111,7 @@ const UserManager = {
      */
     async register(userData) {
         try {
-            const response = await fetch(`${API_BASE}/api/auth/register`, {
+            const response = await fetch(buildApiUrl('/api/auth/register'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(userData)
@@ -126,7 +133,7 @@ const UserManager = {
      */
     async login(username, password) {
         try {
-            const response = await fetch(`${API_BASE}/api/auth/login`, {
+            const response = await fetch(buildApiUrl('/api/auth/login'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })
@@ -168,7 +175,7 @@ const UserManager = {
      */
     async getCurrentUser() {
         try {
-            const response = await fetch(`${API_BASE}/api/auth/me`, {
+            const response = await fetch(buildApiUrl('/api/auth/me'), {
                 method: 'GET',
                 headers: this.getHeaders()
             });
