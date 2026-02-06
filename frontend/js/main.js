@@ -401,7 +401,7 @@ async function solveWithFullPipeline() {
     showProgress(2);
     showProgress(3);
     
-    const response = await fetch(`${API_BASE}/api/solve-problem`, {
+    const response = await UserManager.fetchApi('/api/solve-problem', {
         method: 'POST',
         headers: UserManager.getHeaders(),
         body: JSON.stringify({
@@ -442,7 +442,7 @@ async function performRecognition() {
     showProgress(1);
     
     // 调用后端 API 进行图像识别
-    const response = await fetch(`${API_BASE}/api/recognize`, {
+    const response = await UserManager.fetchApi('/api/recognize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: AppState.imageData })
@@ -453,7 +453,7 @@ async function performRecognition() {
     const result = await response.json();
     if (!result.success) throw new Error(result.error || '识别失败');
     
-    AppState.recognizedText = result.data.text;
+    AppState.recognizedText = normalizeRecognizedText(result.data.text);
     
     showRecognitionResult();
 }
@@ -468,16 +468,24 @@ async function performParsing() {
     showProgress(2);
     
     // 调用后端 API 进行题目解析
-    const response = await fetch(`${API_BASE}/api/parse`, {
+    const response = await UserManager.fetchApi('/api/parse', {
         method: 'POST',
         headers: UserManager.getHeaders(),
         body: JSON.stringify({ 
-            text: AppState.recognizedText,
-            userId: AppState.currentUser?.id
+            text: AppState.recognizedText
         })
     });
     
-    if (!response.ok) throw new Error('解析失败');
+    if (!response.ok) {
+        let errorText = '解析失败';
+        try {
+            const errBody = await response.json();
+            errorText = errBody.error || errBody.message || errorText;
+        } catch (e) {
+            // ignore json parse error
+        }
+        throw new Error(errorText);
+    }
     
     const result = await response.json();
     if (!result.success) throw new Error(result.error || '解析失败');
@@ -491,13 +499,12 @@ async function performSolving() {
     showProgress(3);
     
     // 调用后端 API 生成解答
-    const response = await fetch(`${API_BASE}/api/solve`, {
+    const response = await UserManager.fetchApi('/api/solve', {
         method: 'POST',
         headers: UserManager.getHeaders(),
         body: JSON.stringify({ 
             text: AppState.recognizedText, 
-            parseResult: AppState.parseResult,
-            userId: AppState.currentUser?.id
+            parseResult: AppState.parseResult
         })
     });
     
@@ -521,34 +528,52 @@ function showRecognitionResult() {
 }
 
 function showParseResult() {
-    const result = AppState.parseResult;
+    const result = AppState.parseResult || {};
     
-    DOM.parseType.textContent = result.type;
-    DOM.parseSubject.textContent = result.subject;
+    DOM.parseType.innerHTML = renderInlineMarkdown(result.type || '-');
+    DOM.parseSubject.innerHTML = renderInlineMarkdown(result.subject || '-');
     
     // 知识点标签
-    DOM.parseKnowledge.innerHTML = result.knowledgePoints
-        .map(point => `<span class="parse-tag">${point}</span>`)
+    const knowledgePoints = Array.isArray(result.knowledgePoints) ? result.knowledgePoints : [];
+    DOM.parseKnowledge.innerHTML = knowledgePoints
+        .map(point => `<span class="parse-tag">${escapeHtml(String(point ?? ''))}</span>`)
         .join('');
     
     // 难度等级
-    DOM.parseDifficulty.textContent = result.difficulty;
-    DOM.parseDifficulty.className = 'parse-value difficulty ' + 
-        (result.difficulty === '简单' ? 'easy' : 
-         result.difficulty === '中等' ? 'medium' : 'hard');
+    const difficultyText = String(result.difficulty ?? '').trim();
+    let difficultyClass = '';
+    if (difficultyText.includes('简单')) {
+        difficultyClass = 'easy';
+    } else if (difficultyText.includes('中等')) {
+        difficultyClass = 'medium';
+    } else if (difficultyText) {
+        difficultyClass = 'hard';
+    }
+
+    DOM.parseDifficulty.innerHTML = renderInlineMarkdown(difficultyText || '-');
+    DOM.parseDifficulty.className = `parse-value difficulty${difficultyClass ? ` ${difficultyClass}` : ''}`;
 }
 
 function showSolutionResult() {
-    const solution = AppState.solution;
+    const solution = AppState.solution || {};
     
-    DOM.solutionThinking.textContent = solution.thinking;
+    DOM.solutionThinking.innerHTML = renderMarkdown(solution.thinking);
+    DOM.solutionThinking.classList.add('markdown-content');
     
-    DOM.solutionSteps.innerHTML = solution.steps
-        .map((step, index) => `<p><strong>步骤 ${index + 1}:</strong> ${step}</p>`)
+    const steps = Array.isArray(solution.steps) ? solution.steps : [];
+    DOM.solutionSteps.innerHTML = steps
+        .map((step, index) => `
+            <div class="solution-step">
+                <p class="solution-step-title">步骤 ${index + 1}</p>
+                <div class="markdown-content">${renderMarkdown(step)}</div>
+            </div>
+        `)
         .join('');
     
-    DOM.solutionAnswer.textContent = solution.answer;
-    DOM.solutionSummary.textContent = solution.summary;
+    DOM.solutionAnswer.innerHTML = renderMarkdown(solution.answer);
+    DOM.solutionAnswer.classList.add('markdown-content');
+    DOM.solutionSummary.innerHTML = renderMarkdown(solution.summary);
+    DOM.solutionSummary.classList.add('markdown-content');
 }
 
 function hideResults() {
@@ -637,7 +662,7 @@ function loadHistory() {
 
 async function loadHistoryFromServer() {
     try {
-        const response = await fetch(`${API_BASE}/api/history`, {
+        const response = await UserManager.fetchApi('/api/history', {
             method: 'GET',
             headers: UserManager.getHeaders()
         });
@@ -769,10 +794,119 @@ function showError(message) {
     alert(message);
 }
 
+function normalizeRecognizedText(value) {
+    if (typeof value === 'string') {
+        return value.trim();
+    }
+
+    if (Array.isArray(value)) {
+        return value
+            .map(item => {
+                if (typeof item === 'string') return item;
+                if (item && typeof item === 'object') {
+                    if (typeof item.text === 'string') return item.text;
+                    if (typeof item.content === 'string') return item.content;
+                }
+                return '';
+            })
+            .filter(Boolean)
+            .join('\n')
+            .trim();
+    }
+
+    if (value && typeof value === 'object') {
+        if (typeof value.text === 'string') return value.text.trim();
+        if (typeof value.content === 'string') return value.content.trim();
+        try {
+            return JSON.stringify(value);
+        } catch (e) {
+            return String(value);
+        }
+    }
+
+    return value == null ? '' : String(value).trim();
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function renderInlineMarkdown(text) {
+    let html = escapeHtml(String(text ?? ''));
+
+    // 行内代码优先处理，避免被其他规则破坏
+    html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+    html = html.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
+
+    return html;
+}
+
+function renderMarkdownBlock(block, codeBlocks) {
+    const codeTokenMatch = block.match(/^@@CODE_BLOCK_(\d+)@@$/);
+    if (codeTokenMatch) {
+        const codeBlock = codeBlocks[Number(codeTokenMatch[1])];
+        const languageClass = codeBlock.lang ? ` class="language-${escapeHtml(codeBlock.lang)}"` : '';
+        return `<pre><code${languageClass}>${codeBlock.code}</code></pre>`;
+    }
+
+    const lines = block.split('\n').map(line => line.replace(/\s+$/, ''));
+
+    if (lines.every(line => /^[-*+]\s+/.test(line.trim()))) {
+        const items = lines
+            .map(line => line.trim().replace(/^[-*+]\s+/, ''))
+            .map(item => `<li>${renderInlineMarkdown(item)}</li>`)
+            .join('');
+        return `<ul>${items}</ul>`;
+    }
+
+    if (lines.every(line => /^\d+\.\s+/.test(line.trim()))) {
+        const items = lines
+            .map(line => line.trim().replace(/^\d+\.\s+/, ''))
+            .map(item => `<li>${renderInlineMarkdown(item)}</li>`)
+            .join('');
+        return `<ol>${items}</ol>`;
+    }
+
+    const headingMatch = block.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+        const level = headingMatch[1].length;
+        return `<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`;
+    }
+
+    if (lines.every(line => /^>\s?/.test(line.trim()))) {
+        const quote = lines
+            .map(line => line.trim().replace(/^>\s?/, ''))
+            .map(line => renderInlineMarkdown(line))
+            .join('<br>');
+        return `<blockquote>${quote}</blockquote>`;
+    }
+
+    return `<p>${lines.map(line => renderInlineMarkdown(line)).join('<br>')}</p>`;
+}
+
+function renderMarkdown(text) {
+    const source = String(text ?? '').replace(/\r\n?/g, '\n').trim();
+    if (!source) return '';
+
+    const codeBlocks = [];
+    const withCodeTokens = source.replace(/```([a-zA-Z0-9_-]+)?\n?([\s\S]*?)```/g, (_, lang = '', code = '') => {
+        const token = `@@CODE_BLOCK_${codeBlocks.length}@@`;
+        codeBlocks.push({
+            lang: lang.trim(),
+            code: escapeHtml(code.replace(/\n$/, ''))
+        });
+        return token;
+    });
+
+    return withCodeTokens
+        .split(/\n{2,}/)
+        .map(block => renderMarkdownBlock(block, codeBlocks))
+        .join('');
 }
 
 function formatTime(timestamp) {

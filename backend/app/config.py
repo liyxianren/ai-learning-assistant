@@ -38,8 +38,10 @@ class Config:
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
 
     MULTIMODAL_API_KEY = os.getenv("MULTIMODAL_API_KEY", "")
-    MULTIMODAL_API_URL = os.getenv("MULTIMODAL_API_URL", "https://api.openai.com/v1/chat/completions")
-    MULTIMODAL_MODEL = os.getenv("MULTIMODAL_MODEL", "gpt-4-vision-preview")
+    MULTIMODAL_API_URL = os.getenv(
+        "MULTIMODAL_API_URL", "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    )
+    MULTIMODAL_MODEL = os.getenv("MULTIMODAL_MODEL", "glm-4.6v-flashx")
 
     CHATGLM_API_KEY = os.getenv("CHATGLM_API_KEY", "")
     CHATGLM_API_URL = os.getenv(

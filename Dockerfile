@@ -1,14 +1,24 @@
-FROM nginx:alpine
+FROM python:3.12-slim
 
-# 复制前端静态文件
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends nginx supervisor && \
+    rm -rf /var/lib/apt/lists/*
+
+# --- Backend ---
+WORKDIR /app/backend
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/ .
+
+# --- Frontend ---
 COPY frontend/ /usr/share/nginx/html
 
-# 保持模板机制以支持 BACKEND_URL 环境变量替换
-COPY nginx.conf /etc/nginx/templates/default.conf.template
+# --- Config ---
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY supervisord.conf /etc/supervisor/conf.d/app.conf
 
-# 默认后端地址，可在运行时覆盖
-ENV BACKEND_URL=http://localhost:3000
+RUN rm -f /etc/nginx/sites-enabled/default
 
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["supervisord", "-n", "-c", "/etc/supervisor/conf.d/app.conf"]

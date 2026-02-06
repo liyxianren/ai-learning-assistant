@@ -4,6 +4,36 @@
  */
 
 const API_BASE = '';
+const DEV_FALLBACK_API_BASE = 'http://localhost:3000';
+
+function isLocalhost() {
+    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+}
+
+function buildApiBases() {
+    if (isLocalhost() && window.location.port !== '3000') {
+        // 本地分离开发：前端通常在 8080，后端在 3000，优先命中后端端口以避免静态服务器 404/501 噪音
+        return [DEV_FALLBACK_API_BASE, API_BASE];
+    }
+    return [API_BASE];
+}
+
+function makeApiUrl(base, path) {
+    if (/^https?:\/\//i.test(path)) {
+        return path;
+    }
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${base}${normalizedPath}`;
+}
+
+function shouldFallbackToDevBackend(response) {
+    if (!isLocalhost()) return false;
+    if (response.ok) return false;
+    const contentType = response.headers.get('content-type') || '';
+    // python -m http.server 等静态服务会对 /api/* 返回 HTML 错误页（404/405/501）
+    // 这类响应应自动回退到本地后端端口。
+    return contentType.includes('text/html');
+}
 
 const UserManager = {
     tokenKey: 'ai_learning_assistant_token',
@@ -78,12 +108,45 @@ const UserManager = {
     },
 
     /**
+     * 统一 API 请求：开发环境优先 localhost:3000，失败后回退同源
+     */
+    async fetchApi(path, options = {}) {
+        const bases = buildApiBases();
+        let lastError = null;
+        let lastResponse = null;
+
+        for (let i = 0; i < bases.length; i++) {
+            const base = bases[i];
+            const url = makeApiUrl(base, path);
+            try {
+                const response = await fetch(url, options);
+                lastResponse = response;
+
+                // 同源静态服务器返回 HTML 错误页时，自动重试后端端口
+                if (base === '' && shouldFallbackToDevBackend(response) && i < bases.length - 1) {
+                    continue;
+                }
+
+                return response;
+            } catch (error) {
+                lastError = error;
+                if (i === bases.length - 1) {
+                    throw error;
+                }
+            }
+        }
+
+        if (lastError) throw lastError;
+        return lastResponse;
+    },
+
+    /**
      * 发送验证码
      * @param {string} username - 用户名
      */
     async sendVerificationCode(username) {
         try {
-            const response = await fetch(`${API_BASE}/api/auth/send-code`, {
+            const response = await this.fetchApi('/api/auth/send-code', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username })
@@ -104,7 +167,7 @@ const UserManager = {
      */
     async register(userData) {
         try {
-            const response = await fetch(`${API_BASE}/api/auth/register`, {
+            const response = await this.fetchApi('/api/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(userData)
@@ -126,7 +189,7 @@ const UserManager = {
      */
     async login(username, password) {
         try {
-            const response = await fetch(`${API_BASE}/api/auth/login`, {
+            const response = await this.fetchApi('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })
@@ -168,7 +231,7 @@ const UserManager = {
      */
     async getCurrentUser() {
         try {
-            const response = await fetch(`${API_BASE}/api/auth/me`, {
+            const response = await this.fetchApi('/api/auth/me', {
                 method: 'GET',
                 headers: this.getHeaders()
             });
@@ -196,10 +259,8 @@ const UserManager = {
         this.removeToken();
         this.removeUser();
 
-        // 刷新页面或跳转
-        if (window.location.pathname !== '/' && window.location.pathname !== '/index.html') {
-            window.location.href = '/';
-        }
+        // 统一回到登录首页
+        window.location.href = '/index.html';
     },
 
     /**

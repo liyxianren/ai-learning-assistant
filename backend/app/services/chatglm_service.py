@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from typing import Dict, Generator, Iterable, Optional
@@ -13,6 +14,155 @@ from app.utils.errors import APIError
 
 
 class ChatGLMService:
+    @staticmethod
+    def _normalize_text_content(content) -> str:
+        if isinstance(content, str):
+            return content.strip()
+
+        if isinstance(content, list):
+            chunks = []
+            for item in content:
+                if isinstance(item, str):
+                    if item.strip():
+                        chunks.append(item.strip())
+                    continue
+                if not isinstance(item, dict):
+                    continue
+
+                for key in ("text", "content", "output_text"):
+                    value = item.get(key)
+                    if isinstance(value, str) and value.strip():
+                        chunks.append(value.strip())
+                        break
+            return "\n".join(chunks).strip()
+
+        if isinstance(content, dict):
+            for key in ("text", "content", "output_text", "reasoning_content"):
+                value = content.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+            return json.dumps(content, ensure_ascii=False).strip()
+
+        if content is None:
+            return ""
+
+        return str(content).strip()
+
+    @staticmethod
+    def _normalize_list_field(value) -> list[str]:
+        if value is None:
+            return []
+
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+
+        text = str(value).strip()
+        if not text:
+            return []
+
+        if text.startswith("[") and text.endswith("]"):
+            try:
+                decoded = json.loads(text)
+                if isinstance(decoded, list):
+                    return [str(item).strip() for item in decoded if str(item).strip()]
+            except Exception:  # noqa: BLE001
+                pass
+
+        parts = re.split(r"[，,、；;\n]+", text)
+        return [part.strip(" -•*") for part in parts if part.strip(" -•*")]
+
+    @staticmethod
+    def _infer_type(text: str) -> str:
+        normalized = text or ""
+        if any(keyword in normalized for keyword in ("判断", "对错", "正确吗", "错误吗")):
+            return "判断"
+        if "填空" in normalized or "____" in normalized or "（  ）" in normalized:
+            return "填空"
+        if "选择" in normalized or re.search(r"\bA[\.、]\s*.+\bB[\.、]\s*.+", normalized):
+            return "选择"
+        return "解答"
+
+    @staticmethod
+    def _infer_subject(text: str) -> str:
+        normalized = text or ""
+        if re.search(r"[0-9xXyY+\-*/=^√π∫Σ≤≥<>]", normalized) or any(
+            keyword in normalized for keyword in ("方程", "函数", "几何", "数学", "代数", "概率")
+        ):
+            return "数学"
+        if any(keyword in normalized for keyword in ("英语", "English", "完形填空", "阅读理解")):
+            return "英语"
+        if any(keyword in normalized for keyword in ("物理", "电路", "力学", "速度", "加速度")):
+            return "物理"
+        if any(keyword in normalized for keyword in ("化学", "反应", "方程式", "元素")):
+            return "化学"
+        if any(keyword in normalized for keyword in ("生物", "细胞", "DNA", "遗传")):
+            return "生物"
+        return "综合"
+
+    @staticmethod
+    def _infer_difficulty(text: str) -> str:
+        size = len((text or "").strip())
+        if size <= 30:
+            return "简单"
+        if size <= 120:
+            return "中等"
+        return "困难"
+
+    def _coerce_parse_result(self, data: Dict, source_text: str) -> Dict:
+        raw_type = str(data.get("type", "")).strip()
+        type_value = raw_type if raw_type in {"选择", "填空", "解答", "判断"} else self._infer_type(source_text)
+
+        subject_value = str(data.get("subject", "")).strip() or self._infer_subject(source_text)
+
+        difficulty_raw = str(data.get("difficulty", "")).strip()
+        difficulty_value = (
+            difficulty_raw
+            if difficulty_raw in {"简单", "中等", "困难"}
+            else self._infer_difficulty(source_text)
+        )
+
+        knowledge_points = self._normalize_list_field(data.get("knowledgePoints"))
+        if not knowledge_points:
+            knowledge_points = ["题型分析", "解题方法"]
+
+        prerequisites = self._normalize_list_field(data.get("prerequisites"))
+        if not prerequisites:
+            prerequisites = ["相关基础概念"]
+
+        return {
+            "type": type_value,
+            "subject": subject_value,
+            "knowledgePoints": knowledge_points,
+            "difficulty": difficulty_value,
+            "prerequisites": prerequisites,
+        }
+
+    def _extract_fields_from_text(self, content: str, source_text: str) -> Dict:
+        text = (content or "").strip()
+        if not text:
+            return self._coerce_parse_result({}, source_text)
+
+        fields = {}
+
+        type_match = re.search(r"(?:题目类型|类型)\s*[:：]\s*([^\n，,。；;]+)", text)
+        subject_match = re.search(r"(?:所属学科|学科)\s*[:：]\s*([^\n，,。；;]+)", text)
+        difficulty_match = re.search(r"(?:难度等级|难度)\s*[:：]\s*([^\n，,。；;]+)", text)
+        kp_match = re.search(r"(?:知识点)\s*[:：]\s*([^\n]+)", text)
+        pre_match = re.search(r"(?:前置知识|先修知识)\s*[:：]\s*([^\n]+)", text)
+
+        if type_match:
+            fields["type"] = type_match.group(1).strip()
+        if subject_match:
+            fields["subject"] = subject_match.group(1).strip()
+        if difficulty_match:
+            fields["difficulty"] = difficulty_match.group(1).strip()
+        if kp_match:
+            fields["knowledgePoints"] = self._normalize_list_field(kp_match.group(1).strip())
+        if pre_match:
+            fields["prerequisites"] = self._normalize_list_field(pre_match.group(1).strip())
+
+        return self._coerce_parse_result(fields, source_text)
+
     def _request(self, data: dict, stream: bool = False) -> requests.Response:
         api_key = current_app.config.get("CHATGLM_API_KEY")
         api_url = current_app.config.get("CHATGLM_API_URL")
@@ -87,8 +237,17 @@ class ChatGLMService:
         except (KeyError, IndexError, TypeError) as exc:
             raise APIError("ChatGLM 响应结构异常", 500) from exc
 
-        parsed = self._extract_json(content)
-        return parsed
+        normalized_content = self._normalize_text_content(content)
+
+        try:
+            parsed = self._extract_json(normalized_content)
+            return self._coerce_parse_result(parsed, text)
+        except APIError:
+            current_app.logger.warning(
+                "解析返回非标准 JSON，降级提取字段。content=%s",
+                normalized_content[:600],
+            )
+            return self._extract_fields_from_text(normalized_content, text)
 
     def generate_solution(self, text: str, parse_result: Dict) -> Dict:
         knowledge_points = parse_result.get("knowledgePoints", [])
@@ -142,11 +301,21 @@ class ChatGLMService:
         response = self._request(request_data)
 
         try:
-            content = response.json()["choices"][0]["message"]["content"]
+            message = response.json()["choices"][0]["message"]
         except (KeyError, IndexError, TypeError) as exc:
             raise APIError("ChatGLM 响应结构异常", 500) from exc
 
-        return self.parse_solution_content(content)
+        content = message.get("content") if isinstance(message, dict) else message
+        normalized_content = self._normalize_text_content(content)
+
+        # 某些配置下正文可能落在 reasoning_content；若 content 为空则兜底使用 reasoning_content
+        if not normalized_content and isinstance(message, dict):
+            normalized_content = self._normalize_text_content(message.get("reasoning_content"))
+
+        if not normalized_content:
+            raise APIError("解答生成失败: 模型未返回有效内容", 500)
+
+        return self.parse_solution_content(normalized_content)
 
     def generate_solution_stream(self, text: str, parse_result: Dict) -> Generator[str, None, None]:
         knowledge_points = parse_result.get("knowledgePoints", [])
@@ -211,8 +380,10 @@ class ChatGLMService:
                 yield data
 
     @staticmethod
-    def _extract_json(content: str) -> Dict:
-        json_str = content.strip()
+    def _extract_json(content) -> Dict:
+        json_str = ChatGLMService._normalize_text_content(content)
+        if not json_str:
+            raise APIError("解析结果格式错误: 模型未返回有效内容", 500)
 
         code_block_match = re.search(r"```(?:json)?\s*([\s\S]*?)```", json_str)
         if code_block_match:
@@ -227,6 +398,12 @@ class ChatGLMService:
         try:
             return json.loads(json_str)
         except json.JSONDecodeError as exc:
+            try:
+                repaired = ast.literal_eval(json_str)
+            except Exception:  # noqa: BLE001
+                raise APIError(f"解析结果格式错误: {exc}", 500) from exc
+            if isinstance(repaired, dict):
+                return repaired
             raise APIError(f"解析结果格式错误: {exc}", 500) from exc
 
     @staticmethod
@@ -238,26 +415,62 @@ class ChatGLMService:
             "summary": "",
         }
 
-        thinking_match = re.search(r"【解题思路】\s*\n?([\s\S]*?)(?=【|$)", content)
-        if thinking_match:
-            result["thinking"] = thinking_match.group(1).strip()
+        text = ChatGLMService._normalize_text_content(content)
+        if not text:
+            return result
 
-        steps_match = re.search(r"【详细步骤】\s*\n?([\s\S]*?)(?=【|$)", content)
-        if steps_match:
-            steps_text = steps_match.group(1).strip()
-            result["steps"] = [
-                re.sub(r"^\d+\.\s*", "", line).strip()
-                for line in steps_text.splitlines()
-                if line.strip()
-            ]
+        heading_line = r"\n\s*(?:#{1,6}\s*)?(?:【\s*)?(?:解题思路|详细步骤|解题步骤|步骤|最终答案|答案|知识总结|总结)(?:\s*】)?\s*[:：]?"
 
-        answer_match = re.search(r"【最终答案】\s*\n?([\s\S]*?)(?=【|$)", content)
-        if answer_match:
-            result["answer"] = answer_match.group(1).strip()
+        def _extract_section(aliases: str) -> str:
+            pattern = (
+                r"(?:^|\n)\s*(?:#{1,6}\s*)?(?:【\s*)?(?:"
+                + aliases
+                + r")(?:\s*】)?\s*[:：]?\s*([\s\S]*?)(?="
+                + heading_line
+                + r"|\Z)"
+            )
+            match = re.search(pattern, text, re.IGNORECASE)
+            return match.group(1).strip() if match else ""
 
-        summary_match = re.search(r"【知识总结】\s*\n?([\s\S]*?)(?=【|$)", content)
-        if summary_match:
-            result["summary"] = summary_match.group(1).strip()
+        result["thinking"] = _extract_section("解题思路")
+        steps_text = _extract_section("详细步骤|解题步骤|步骤")
+        result["answer"] = _extract_section("最终答案|答案")
+        result["summary"] = _extract_section("知识总结|总结")
+
+        if steps_text:
+            parsed_steps = []
+            for line in steps_text.splitlines():
+                cleaned = re.sub(r"^\s*(?:[-*•]|\d+[\.、\)]|第[一二三四五六七八九十百零\d]+步)\s*", "", line).strip()
+                if cleaned:
+                    parsed_steps.append(cleaned)
+            if not parsed_steps:
+                parsed_steps = [item.strip() for item in re.split(r"[。；;\n]+", steps_text) if item.strip()]
+            result["steps"] = parsed_steps
+
+        # 兜底：模型未按模板输出时，尽量把正文映射到可展示结构
+        if not result["thinking"] and not result["steps"] and not result["answer"] and not result["summary"]:
+            paragraphs = [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
+            if paragraphs:
+                result["thinking"] = paragraphs[0]
+                if len(paragraphs) > 1:
+                    result["summary"] = paragraphs[-1]
+                middle = paragraphs[1:-1] if len(paragraphs) > 2 else paragraphs[1:]
+                result["steps"] = middle
+
+            numbered_lines = []
+            for line in text.splitlines():
+                stripped = line.strip()
+                if re.match(r"^(?:\d+[\.、\)]|[-*•])\s*", stripped):
+                    numbered_lines.append(re.sub(r"^(?:\d+[\.、\)]|[-*•])\s*", "", stripped).strip())
+            if numbered_lines and not result["steps"]:
+                result["steps"] = [line for line in numbered_lines if line]
+
+        if not result["answer"]:
+            answer_inline = re.search(r"(?:最终答案|答案)\s*[:：]\s*(.+)", text)
+            if answer_inline:
+                result["answer"] = answer_inline.group(1).strip()
+            elif result["steps"]:
+                result["answer"] = str(result["steps"][-1]).strip()
 
         return result
 
