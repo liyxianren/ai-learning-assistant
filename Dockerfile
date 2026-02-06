@@ -137,10 +137,10 @@ echo "  Nginx 端口: 8080"
 echo "  后端端口: 3000"
 echo "=========================================="
 
-# 注入前端配置 - 使用相对路径 (通过 Nginx 代理)
+# 注入前端配置 - API 路径由代码中指定，这里设为空
 cat > /usr/share/nginx/html/js/config.js <<CONFIG
 window.AppConfig = {
-    API_BASE_URL: '/api'
+    API_BASE_URL: ''
 };
 CONFIG
 
