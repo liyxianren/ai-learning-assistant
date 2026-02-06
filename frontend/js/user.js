@@ -113,31 +113,27 @@ const UserManager = {
     async fetchApi(path, options = {}) {
         const bases = buildApiBases();
         let lastError = null;
-        let lastResponse = null;
 
         for (let i = 0; i < bases.length; i++) {
-            const base = bases[i];
-            const url = makeApiUrl(base, path);
+            const url = makeApiUrl(bases[i], path);
             try {
                 const response = await fetch(url, options);
-                lastResponse = response;
+                const ct = response.headers.get('content-type') || '';
 
-                // 同源静态服务器返回 HTML 错误页时，自动重试后端端口
-                if (base === '' && shouldFallbackToDevBackend(response) && i < bases.length - 1) {
-                    continue;
+                // 静态服务器返回 HTML（非 JSON），跳过或抛出
+                if (!response.ok && ct.includes('text/html')) {
+                    if (i < bases.length - 1) continue;
+                    throw new Error('后端服务不可用');
                 }
 
                 return response;
             } catch (error) {
                 lastError = error;
-                if (i === bases.length - 1) {
-                    throw error;
-                }
+                if (i === bases.length - 1) throw error;
             }
         }
 
-        if (lastError) throw lastError;
-        return lastResponse;
+        throw lastError;
     },
 
     /**
