@@ -16,6 +16,9 @@ const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 // 创建 Express 应用
 const app = express();
 
+// Zeabur/Nginx 反向代理场景，信任第一层代理头（X-Forwarded-For）
+app.set('trust proxy', 1);
+
 // 安全中间件
 app.use(helmet());
 
@@ -26,6 +29,8 @@ app.use(cors(config.cors));
 const limiter = rateLimit({
     windowMs: config.limits.rateLimitWindowMs,
     max: config.limits.rateLimitMaxRequests,
+    standardHeaders: true,
+    legacyHeaders: false,
     message: {
         success: false,
         error: '请求过于频繁，请稍后再试'
@@ -40,7 +45,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // 请求日志
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - ${req.headers['origin'] || 'unknown'}`);
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+        console.log('Request body:', JSON.stringify(req.body, null, 2));
+    }
     next();
 });
 

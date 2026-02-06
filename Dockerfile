@@ -72,6 +72,13 @@ http {
             try_files $uri $uri/ /home.html;
         }
 
+        # 浏览器默认请求，避免无意义 404 日志
+        location = /favicon.ico {
+            access_log off;
+            log_not_found off;
+            return 204;
+        }
+
         # API 反向代理到 Node.js 后端
         location /api {
             proxy_pass http://127.0.0.1:3001;
