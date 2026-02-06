@@ -1,36 +1,28 @@
 # =====================================================
 # AI 学习助手 - 前后端一体化 Docker 镜像
-# 适配 Zeabur 部署
 # =====================================================
 
 FROM node:18-alpine
 
-# 安装 Nginx 和 Supervisor
-RUN apk add --no-cache nginx supervisor
+# 只安装 Nginx（不需要 Supervisor）
+RUN apk add --no-cache nginx
 
-# 创建必要目录
-RUN mkdir -p /var/log/supervisor /run/nginx /app/backend /etc/supervisor.d
+# 创建目录
+RUN mkdir -p /run/nginx /app/backend/data
 
-# ===== 后端设置 =====
+# ===== 后端 =====
 WORKDIR /app/backend
-
-# 先复制 package.json 以利用 Docker 缓存
 COPY backend/package*.json ./
 RUN npm ci --only=production
-
-# 复制后端代码
 COPY backend/src ./src
 COPY backend/data ./data
 
-# ===== 前端设置 =====
-# 清空 Nginx 默认页面
+# ===== 前端 =====
 RUN rm -rf /usr/share/nginx/html/*
-
-# 复制前端静态文件
 COPY frontend/ /usr/share/nginx/html/
 
-# ===== Nginx 配置 (监听 8080 端口) =====
-RUN cat > /etc/nginx/nginx.conf <<'NGINXCONF'
+# ===== Nginx 配置 =====
+RUN cat > /etc/nginx/nginx.conf <<'EOF'
 worker_processes auto;
 error_log /dev/stderr warn;
 pid /run/nginx/nginx.pid;
@@ -42,133 +34,72 @@ events {
 http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
-
-    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
-                    '$status $body_bytes_sent "$http_referer" '
-                    '"$http_user_agent"';
-    access_log /dev/stdout main;
-
+    access_log /dev/stdout combined;
     sendfile on;
     keepalive_timeout 65;
-
     gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
 
     server {
         listen 8080;
-        server_name localhost;
-
         root /usr/share/nginx/html;
-        index home.html index.html;
+        index home.html;
 
-        # 前端路由
         location / {
             try_files $uri $uri/ /home.html;
         }
 
-        # API 反向代理到 Node.js 后端
         location /api {
             proxy_pass http://127.0.0.1:3000;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            # 支持流式响应 (SSE)
             proxy_buffering off;
-            proxy_cache off;
             proxy_read_timeout 300s;
-
-            # WebSocket 支持
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-        }
-
-        # 静态资源缓存
-        location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-            expires 7d;
-            add_header Cache-Control "public, immutable";
         }
     }
 }
-NGINXCONF
-
-# ===== Supervisor 配置 =====
-RUN cat > /etc/supervisord.conf <<'SUPCONF'
-[supervisord]
-nodaemon=true
-logfile=/dev/null
-logfile_maxbytes=0
-pidfile=/var/run/supervisord.pid
-user=root
-
-[program:nginx]
-command=nginx -g "daemon off;"
-autostart=true
-autorestart=true
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
-priority=10
-
-[program:backend]
-command=node /app/backend/src/app.js
-directory=/app/backend
-autostart=true
-autorestart=true
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
-environment=NODE_ENV="production",PORT="3000"
-priority=20
-startsecs=5
-SUPCONF
+EOF
 
 # ===== 启动脚本 =====
-RUN cat > /docker-entrypoint.sh <<'SCRIPT'
+RUN cat > /start.sh <<'SCRIPT'
 #!/bin/sh
-set -e
 
-echo "=========================================="
-echo "  AI 学习助手 启动中..."
-echo "  Nginx 端口: 8080"
-echo "  后端端口: 3000"
-echo "=========================================="
+echo "========================================"
+echo "  AI Learning Assistant"
+echo "========================================"
 
-# 注入前端配置 - API 路径由代码中指定，这里设为空
-cat > /usr/share/nginx/html/js/config.js <<CONFIG
-window.AppConfig = {
-    API_BASE_URL: ''
-};
-CONFIG
+# 初始化数据文件
+cd /app/backend
+[ -f data/users.json ] || echo '[]' > data/users.json
+[ -f data/history.json ] || echo '[]' > data/history.json
 
-echo "前端配置已生成"
+# 生成前端配置
+echo 'window.AppConfig={API_BASE_URL:""};' > /usr/share/nginx/html/js/config.js
 
-# 确保数据目录存在
-mkdir -p /app/backend/data
+# 启动后端（后台运行）
+echo "Starting backend..."
+NODE_ENV=production PORT=3000 node src/app.js &
+BACKEND_PID=$!
 
-# 如果数据文件不存在，创建空的 JSON 文件
-[ -f /app/backend/data/users.json ] || echo '[]' > /app/backend/data/users.json
-[ -f /app/backend/data/history.json ] || echo '[]' > /app/backend/data/history.json
+# 等待后端启动
+sleep 3
 
-echo "数据目录已准备"
-echo "启动 Supervisor..."
+# 验证后端启动
+if kill -0 $BACKEND_PID 2>/dev/null; then
+    echo "Backend started (PID: $BACKEND_PID)"
+else
+    echo "ERROR: Backend failed to start!"
+    exit 1
+fi
 
-exec supervisord -c /etc/supervisord.conf
+# 启动 Nginx（前台运行，保持容器存活）
+echo "Starting Nginx on port 8080..."
+nginx -g "daemon off;"
 SCRIPT
-RUN chmod +x /docker-entrypoint.sh
 
-# 暴露端口
+RUN chmod +x /start.sh
+
 EXPOSE 8080
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD wget -q --spider http://localhost:8080/api/health || exit 1
-
-# 启动
-ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["/start.sh"]

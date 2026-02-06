@@ -11,7 +11,7 @@
     "username": "testuser",
     "password": "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
     "createdAt": "2026-02-05T10:23:24.721Z",
-    "lastLoginAt": null
+    "lastLoginAt": "2026-02-06T02:59:27.251Z"
   },
   {
     "id": "1487af5d-2d55-4ca2-ad9d-7303c9e14bab",
@@ -40,5 +40,12 @@
     "password": "bcb15f821479b4d5772bd0ca866c00ad5f926e3580720659cc80d39c9d09802a",
     "createdAt": "2026-02-05T10:25:58.601Z",
     "lastLoginAt": "2026-02-05T13:12:51.702Z"
+  },
+  {
+    "id": "73ce7cd0-b619-4ed2-871f-44024e6afa9c",
+    "username": "test_user_final",
+    "password": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601",
+    "createdAt": "2026-02-06T03:08:17.816Z",
+    "lastLoginAt": "2026-02-06T03:08:19.369Z"
   }
 ]
