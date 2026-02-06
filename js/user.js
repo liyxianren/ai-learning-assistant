@@ -28,7 +28,12 @@ const UserManager = {
      * 获取 Token
      */
     getToken() {
-        return localStorage.getItem(this.tokenKey);
+        try {
+            return localStorage.getItem(this.tokenKey);
+        } catch (error) {
+            console.error('读取 Token 失败:', error);
+            return null;
+        }
     },
 
     /**
@@ -36,22 +41,37 @@ const UserManager = {
      * @param {string} token
      */
     setToken(token) {
-        localStorage.setItem(this.tokenKey, token);
+        try {
+            localStorage.setItem(this.tokenKey, token);
+        } catch (error) {
+            console.error('保存 Token 失败:', error);
+        }
     },
 
     /**
      * 删除 Token
      */
     removeToken() {
-        localStorage.removeItem(this.tokenKey);
+        try {
+            localStorage.removeItem(this.tokenKey);
+        } catch (error) {
+            console.error('删除 Token 失败:', error);
+        }
     },
 
     /**
      * 获取保存的用户信息
      */
     getSavedUser() {
-        const userData = localStorage.getItem(this.userKey);
-        return userData ? JSON.parse(userData) : null;
+        try {
+            const userData = localStorage.getItem(this.userKey);
+            if (!userData) return null;
+            return JSON.parse(userData);
+        } catch (error) {
+            console.error('读取用户信息失败，已清理本地缓存:', error);
+            this.removeUser();
+            return null;
+        }
     },
 
     /**
@@ -59,14 +79,22 @@ const UserManager = {
      * @param {Object} user
      */
     setUser(user) {
-        localStorage.setItem(this.userKey, JSON.stringify(user));
+        try {
+            localStorage.setItem(this.userKey, JSON.stringify(user));
+        } catch (error) {
+            console.error('保存用户信息失败:', error);
+        }
     },
 
     /**
      * 删除用户信息
      */
     removeUser() {
-        localStorage.removeItem(this.userKey);
+        try {
+            localStorage.removeItem(this.userKey);
+        } catch (error) {
+            console.error('删除用户信息失败:', error);
+        }
     },
 
     /**

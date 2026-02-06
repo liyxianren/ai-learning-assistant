@@ -101,8 +101,10 @@ const DOM = {
 // ========================================
 
 document.addEventListener('DOMContentLoaded', async () => {
-    await initUserState();
     initEventListeners();
+    updateSubmitButton();
+
+    await initUserState();
     loadHistory();
     updateSubmitButton();
 });
@@ -345,8 +347,13 @@ function updateUserDisplay() {
 }
 
 async function initUserState() {
-    await UserManager.init();
-    updateUserDisplay();
+    try {
+        await UserManager.init();
+    } catch (error) {
+        console.error('初始化用户状态异常:', error);
+    } finally {
+        updateUserDisplay();
+    }
 }
 
 function updateSubmitButton() {
