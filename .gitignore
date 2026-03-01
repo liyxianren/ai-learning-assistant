@@ -1,0 +1,30 @@
+# 虚拟环境
+venv/
+
+# 数据库文件
+data/
+*.db
+*.json
+
+# IDE文件
+.vscode/
+.idea/
+
+# 临时文件
+__pycache__/
+*.pyc
+
+# 环境变量文件
+.env
+
+# 日志文件
+*.log
+
+# 构建文件
+build/
+dist/
+*.egg-info/
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
