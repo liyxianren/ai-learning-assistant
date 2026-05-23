@@ -362,25 +362,16 @@ async function handleSubmit() {
     hideResults();
     
     try {
-        if (UserManager.isLoggedIn() && AppState.currentTab === 'text') {
-            // 登录用户使用完整解题流程（自动保存历史记录）
-            await solveWithFullPipeline();
+        if (AppState.currentTab === 'text') {
+            AppState.recognizedText = DOM.textInput.value.trim();
+            await skipRecognitionStep();
         } else {
-            // 未登录用户或图片输入：使用原有流程
-            if (AppState.currentTab === 'text') {
-                AppState.recognizedText = DOM.textInput.value.trim();
-                await skipRecognitionStep();
-            } else {
-                await performRecognition();
-            }
-            
-            // 执行解析和解答
-            await performParsing();
-            await performSolving();
-            
-            // 保存到历史记录
-            saveToHistory();
+            await performRecognition();
         }
+
+        await performParsing();
+        await performSolving();
+        saveToHistory();
         
     } catch (error) {
         console.error('处理失败:', error);
@@ -498,9 +489,9 @@ async function performParsing() {
 
 async function performSolving() {
     showProgress(3);
+    showStreamingSolutionResult();
     
-    // 调用后端 API 生成解答
-    const response = await UserManager.fetchApi('/api/solve', {
+    const response = await UserManager.fetchApi('/api/solve-stream', {
         method: 'POST',
         headers: UserManager.getHeaders(),
         body: JSON.stringify({ 
@@ -509,14 +500,52 @@ async function performSolving() {
         })
     });
     
-    if (!response.ok) throw new Error('解答生成失败');
-    
-    const result = await response.json();
-    if (!result.success) throw new Error(result.error || '解答生成失败');
-    
-    AppState.solution = result.data;
-    
-    showSolutionResult();
+    if (!response.ok || !response.body) throw new Error('解答生成失败');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let reasoningText = '';
+    let contentText = '';
+
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+
+        for (const eventText of events) {
+            const event = parseSSEEvent(eventText);
+            if (!event) continue;
+            if (event.done) {
+                buffer = '';
+                break;
+            }
+            if (event.error) {
+                throw new Error(event.error);
+            }
+            if (event.type === 'reasoning') {
+                reasoningText += event.content || '';
+                updateStreamingMarkdown(DOM.solutionReasoning, reasoningText || '模型正在思考...');
+            } else {
+                contentText += event.content || '';
+                updateStreamingMarkdown(DOM.solutionSteps, contentText || '正在生成解答...');
+            }
+        }
+    }
+
+    AppState.solution = {
+        reasoning: reasoningText,
+        thinking: '',
+        steps: contentText ? [contentText] : [],
+        answer: '',
+        summary: '',
+    };
+
+    updateStreamingMarkdown(DOM.solutionReasoning, reasoningText || '模型未返回独立思考过程。');
+    updateStreamingMarkdown(DOM.solutionSteps, contentText || '暂未生成详细步骤，请重试。');
 }
 
 // ========================================
@@ -553,6 +582,20 @@ function showParseResult() {
 
     DOM.parseDifficulty.innerHTML = renderInlineMarkdown(difficultyText || '-');
     DOM.parseDifficulty.className = `parse-value difficulty${difficultyClass ? ` ${difficultyClass}` : ''}`;
+}
+
+function showStreamingSolutionResult() {
+    DOM.resultSection.style.display = 'flex';
+    DOM.solutionReasoning.innerHTML = '<p class="stream-placeholder">等待模型思考...</p>';
+    DOM.solutionReasoning.classList.add('markdown-content', 'streaming');
+    DOM.solutionThinking.innerHTML = '<p class="stream-placeholder">流式输出会直接进入下方过程。</p>';
+    DOM.solutionThinking.classList.add('markdown-content');
+    DOM.solutionSteps.innerHTML = '<p class="stream-placeholder">正在生成解答...</p>';
+    DOM.solutionSteps.classList.add('markdown-content', 'streaming');
+    DOM.solutionAnswer.innerHTML = '<p class="stream-placeholder">生成完成后可从过程末尾查看结论。</p>';
+    DOM.solutionAnswer.classList.add('markdown-content');
+    DOM.solutionSummary.innerHTML = '<p class="stream-placeholder">暂未生成知识总结。</p>';
+    DOM.solutionSummary.classList.add('markdown-content');
 }
 
 function showSolutionResult() {
@@ -613,6 +656,33 @@ function showSolutionResult() {
     renderMathInContainer(DOM.solutionSteps);
     renderMathInContainer(DOM.solutionAnswer);
     renderMathInContainer(DOM.solutionSummary);
+}
+
+function parseSSEEvent(eventText) {
+    const dataLines = eventText
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.startsWith('data:'))
+        .map(line => line.slice(5).trim());
+
+    if (dataLines.length === 0) return null;
+
+    const data = dataLines.join('\n');
+    if (data === '[DONE]') return { done: true };
+
+    try {
+        return JSON.parse(data);
+    } catch (error) {
+        console.warn('SSE 解析失败:', error, data);
+        return null;
+    }
+}
+
+function updateStreamingMarkdown(container, text) {
+    container.innerHTML = renderMarkdown(text);
+    container.classList.add('markdown-content');
+    renderMathInContainer(container);
+    container.scrollTop = container.scrollHeight;
 }
 
 function hideResults() {

@@ -533,7 +533,7 @@ class ChatGLMService:
             )
         return result
 
-    def generate_solution_stream(self, text: str, parse_result: Dict) -> Generator[str, None, None]:
+    def generate_solution_stream(self, text: str, parse_result: Dict) -> Generator[Dict[str, str], None, None]:
         knowledge_points = parse_result.get("knowledgePoints", [])
         if isinstance(knowledge_points, list):
             knowledge_text = "、".join(str(item) for item in knowledge_points)
@@ -583,9 +583,12 @@ class ChatGLMService:
                 parsed.get("choices", [{}])[0]
                 .get("delta", {})
             )
+            reasoning = delta.get("reasoning_content") or delta.get("reasoning")
+            if reasoning:
+                yield {"type": "reasoning", "content": reasoning}
             content = delta.get("content")
             if content:
-                yield content
+                yield {"type": "content", "content": content}
 
     @staticmethod
     def _iter_sse_lines(lines: Iterable[Optional[str]]) -> Generator[str, None, None]:

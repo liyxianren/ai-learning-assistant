@@ -70,7 +70,7 @@ class PipelineService:
         except Exception as exc:  # noqa: BLE001
             return {"success": False, "error": str(exc)}
 
-    def solve_stream(self, text: str, parse_result: Dict) -> Generator[str, None, None]:
+    def solve_stream(self, text: str, parse_result: Dict) -> Generator[Dict[str, str], None, None]:
         yield from ai_service.generate_solution_stream(text, parse_result)
 
 

@@ -109,7 +109,7 @@ class AIService:
     def generate_solution(self, text: str, parse_result: Dict) -> Dict:
         return chatglm_service.generate_solution(text, parse_result)
 
-    def generate_solution_stream(self, text: str, parse_result: Dict) -> Generator[str, None, None]:
+    def generate_solution_stream(self, text: str, parse_result: Dict) -> Generator[Dict[str, str], None, None]:
         return chatglm_service.generate_solution_stream(text, parse_result)
 
     def parse_solution_content(self, content: str) -> Dict:
