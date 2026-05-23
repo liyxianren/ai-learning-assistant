@@ -468,7 +468,7 @@ class ChatGLMService:
         else:
             knowledge_text = str(knowledge_points)
 
-        prompt = f"""你是一位耐心的 AI 教师，请为学生提供详细解答。
+        prompt = f"""你是一位耐心的 AI 教师，请为学生提供正式解答。
 
 题目：{text}
 
@@ -480,7 +480,7 @@ class ChatGLMService:
 请严格输出 JSON（不要 markdown 代码块、不要额外说明），字段必须齐全：
 
 {{
-    "thinking": "解题思路（1-3段）",
+    "thinking": "解法概览（1-3段，面向学生，不包含模型内部思考或生成过程）",
     "steps": ["步骤1", "步骤2", "步骤3"],
     "answer": "最终答案（简洁明确）",
     "summary": "知识总结（可迁移的方法与易错点）"
@@ -490,7 +490,7 @@ class ChatGLMService:
 1. steps 必须是字符串数组，至少 2 步；
 2. answer 只保留最终结论，不要重复完整推导；
 3. summary 必须总结方法与易错点，不要留空；
-4. thinking / steps / summary 请使用清晰的 Markdown 结构（如标题、列表、加粗）；
+4. thinking / steps / summary 请使用清晰的 Markdown 结构（如标题、列表、加粗），但不要出现模型内部思考、生成过程、草稿或推理链；
 5. 涉及数学表达式时，使用 LaTeX：行内用 $...$，独立公式用 $$...$$；
 6. 仅输出合法 JSON，字段值中的换行必须按 JSON 字符串格式正确转义。"""
 
@@ -499,7 +499,7 @@ class ChatGLMService:
             "messages": [
                 {
                     "role": "system",
-                    "content": "你是一位优秀的 AI 教师。你必须只输出纯 JSON，禁止输出 markdown 代码块和额外说明。JSON 字段内容允许 Markdown 与 LaTeX。",
+                    "content": "你是一位优秀的 AI 教师。你必须只输出纯 JSON，禁止输出 markdown 代码块和额外说明。JSON 字段内容允许 Markdown 与 LaTeX，但禁止输出模型内部思考或生成过程。",
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -540,26 +540,29 @@ class ChatGLMService:
         else:
             knowledge_text = str(knowledge_points)
 
-        prompt = f"""你是一位耐心的 AI 教师，请为学生提供详细的解答。
+        prompt = f"""你是一位耐心的 AI 教师，请为学生提供面向学习展示的解答。
 
 题目：{text}
 题目类型：{parse_result.get('type', '')}
 所属学科：{parse_result.get('subject', '')}
 知识点：{knowledge_text}
 
-请提供详细的解题思路、步骤、答案和知识总结。
+请只输出给学生看的正式解答，不要输出模型内部思考、生成过程、草稿、推理链或自我检查过程。
+如果需要展示过程，只展示题目的解题步骤，不要描述“我将如何思考/生成/检查”。
 
 格式要求：
 1. 使用 Markdown 组织内容；
-2. 数学公式使用 LaTeX（行内 $...$，块级 $$...$$）；
-3. 不要输出与答案无关的自我反思。"""
+2. 按“详细步骤”“最终答案”“知识总结”三个部分输出；
+3. 数学公式使用 LaTeX（行内 $...$，块级 $$...$$）；
+4. 不要出现“思考过程”“推理过程”“生成过程”“草稿”等内部过程字样；
+5. 不要输出与答案无关的自我反思。"""
 
         request_data = {
             "model": current_app.config.get("DEEPSEEK_MODEL", "deepseek-v4-pro"),
             "messages": [
                 {
                     "role": "system",
-                    "content": "你是一位优秀的 AI 教师，擅长用清晰、易懂的方式讲解题目。",
+                    "content": "你是一位优秀的 AI 教师。最终回答只输出面向学生的解题步骤、答案和知识总结，禁止输出模型内部思考或生成过程。",
                 },
                 {"role": "user", "content": prompt},
             ],
