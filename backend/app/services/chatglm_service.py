@@ -1,4 +1,4 @@
-"""ChatGLM API service."""
+"""DeepSeek API service using an OpenAI-compatible chat completions API."""
 
 from __future__ import annotations
 
@@ -74,6 +74,7 @@ class ChatGLMService:
     @staticmethod
     def _empty_solution_result() -> Dict:
         return {
+            "reasoning": "",
             "thinking": "",
             "steps": [],
             "answer": "",
@@ -127,6 +128,7 @@ class ChatGLMService:
                     return data.get(key)
             return None
 
+        reasoning_raw = _pick("reasoning", "reasoningContent", "reasoning_content", "思考过程")
         thinking_raw = _pick("thinking", "analysis", "thought", "解题思路", "思路")
         steps_raw = _pick("steps", "detailedSteps", "solutionSteps", "详细步骤", "解题步骤", "步骤")
         answer_raw = _pick("answer", "finalAnswer", "final_answer", "最终答案", "答案")
@@ -140,6 +142,7 @@ class ChatGLMService:
             "总结",
         )
 
+        result["reasoning"] = ChatGLMService._normalize_text_content(reasoning_raw)
         result["thinking"] = ChatGLMService._normalize_text_content(thinking_raw)
         result["steps"] = ChatGLMService._normalize_steps_field(steps_raw)
         result["answer"] = ChatGLMService._normalize_text_content(answer_raw)
@@ -149,7 +152,8 @@ class ChatGLMService:
     @staticmethod
     def _has_solution_content(result: Dict) -> bool:
         return bool(
-            result.get("thinking")
+            result.get("reasoning")
+            or result.get("thinking")
             or result.get("steps")
             or result.get("answer")
             or result.get("summary")
@@ -158,6 +162,7 @@ class ChatGLMService:
     @staticmethod
     def _merge_solution_result(primary: Dict, fallback: Dict) -> Dict:
         merged = ChatGLMService._empty_solution_result()
+        merged["reasoning"] = str(primary.get("reasoning") or fallback.get("reasoning") or "").strip()
         merged["thinking"] = str(primary.get("thinking") or fallback.get("thinking") or "").strip()
 
         primary_steps = primary.get("steps") if isinstance(primary.get("steps"), list) else []
@@ -365,12 +370,12 @@ class ChatGLMService:
         return self._coerce_parse_result(fields, source_text)
 
     def _request(self, data: dict, stream: bool = False) -> requests.Response:
-        api_key = current_app.config.get("CHATGLM_API_KEY")
-        api_url = current_app.config.get("CHATGLM_API_URL")
+        api_key = current_app.config.get("DEEPSEEK_API_KEY")
+        api_url = current_app.config.get("DEEPSEEK_API_URL")
         timeout = current_app.config.get("REQUEST_TIMEOUT", 120)
 
         if not api_key:
-            raise APIError("ChatGLM API Key 未配置", 500)
+            raise APIError("DeepSeek API Key 未配置", 500)
 
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -397,7 +402,14 @@ class ChatGLMService:
                     detail = exc.response.text
             if detail:
                 message = f"{message}; {detail}"
-            raise APIError(f"ChatGLM API 错误: {message}", 500) from exc
+            raise APIError(f"DeepSeek API 错误: {message}", 500) from exc
+
+    @staticmethod
+    def _apply_deepseek_options(request_data: dict) -> None:
+        request_data["model"] = current_app.config.get("DEEPSEEK_MODEL", "deepseek-v4-pro")
+        if current_app.config.get("DEEPSEEK_ENABLE_THINKING"):
+            request_data["reasoning_effort"] = current_app.config.get("DEEPSEEK_REASONING_EFFORT", "high")
+            request_data["thinking"] = {"type": "enabled"}
 
     def _build_parse_prompt(self, text: str) -> str:
         return f"""你是一位经验丰富的教师，请分析以下题目：
@@ -416,7 +428,7 @@ class ChatGLMService:
 
     def parse_problem(self, text: str) -> Dict:
         request_data = {
-            "model": current_app.config.get("CHATGLM_MODEL", "glm-4.7-flashx"),
+            "model": current_app.config.get("DEEPSEEK_MODEL", "deepseek-v4-pro"),
             "messages": [
                 {
                     "role": "system",
@@ -428,15 +440,14 @@ class ChatGLMService:
             "max_tokens": 1600,
         }
 
-        if current_app.config.get("CHATGLM_ENABLE_THINKING"):
-            request_data["thinking"] = {"type": "enabled"}
+        self._apply_deepseek_options(request_data)
 
         response = self._request(request_data)
 
         try:
             content = response.json()["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
-            raise APIError("ChatGLM 响应结构异常", 500) from exc
+            raise APIError("DeepSeek 响应结构异常", 500) from exc
 
         normalized_content = self._normalize_text_content(content)
 
@@ -484,7 +495,7 @@ class ChatGLMService:
 6. 仅输出合法 JSON，字段值中的换行必须按 JSON 字符串格式正确转义。"""
 
         request_data = {
-            "model": current_app.config.get("CHATGLM_MODEL", "glm-4.7-flashx"),
+            "model": current_app.config.get("DEEPSEEK_MODEL", "deepseek-v4-pro"),
             "messages": [
                 {
                     "role": "system",
@@ -496,15 +507,14 @@ class ChatGLMService:
             "max_tokens": 1024,
         }
 
-        if current_app.config.get("CHATGLM_ENABLE_THINKING"):
-            request_data["thinking"] = {"type": "enabled"}
+        self._apply_deepseek_options(request_data)
 
         response = self._request(request_data)
 
         try:
             message = response.json()["choices"][0]["message"]
         except (KeyError, IndexError, TypeError) as exc:
-            raise APIError("ChatGLM 响应结构异常", 500) from exc
+            raise APIError("DeepSeek 响应结构异常", 500) from exc
 
         content = message.get("content") if isinstance(message, dict) else message
         normalized_content = self._normalize_text_content(content)
@@ -516,7 +526,12 @@ class ChatGLMService:
         if not normalized_content:
             raise APIError("解答生成失败: 模型未返回有效内容", 500)
 
-        return self.parse_solution_content(normalized_content)
+        result = self.parse_solution_content(normalized_content)
+        if isinstance(message, dict):
+            result["reasoning"] = self._normalize_text_content(
+                message.get("reasoning_content") or message.get("reasoning")
+            )
+        return result
 
     def generate_solution_stream(self, text: str, parse_result: Dict) -> Generator[str, None, None]:
         knowledge_points = parse_result.get("knowledgePoints", [])
@@ -540,7 +555,7 @@ class ChatGLMService:
 3. 不要输出与答案无关的自我反思。"""
 
         request_data = {
-            "model": current_app.config.get("CHATGLM_MODEL", "glm-4.7-flashx"),
+            "model": current_app.config.get("DEEPSEEK_MODEL", "deepseek-v4-pro"),
             "messages": [
                 {
                     "role": "system",
@@ -553,8 +568,7 @@ class ChatGLMService:
             "stream": True,
         }
 
-        if current_app.config.get("CHATGLM_ENABLE_THINKING"):
-            request_data["thinking"] = {"type": "enabled"}
+        self._apply_deepseek_options(request_data)
 
         response = self._request(request_data, stream=True)
 
@@ -726,10 +740,11 @@ class ChatGLMService:
 
     def health_check(self) -> bool:
         request_data = {
-            "model": current_app.config.get("CHATGLM_MODEL", "glm-4.7-flashx"),
+            "model": current_app.config.get("DEEPSEEK_MODEL", "deepseek-v4-pro"),
             "messages": [{"role": "user", "content": "你好"}],
             "max_tokens": 10,
         }
+        self._apply_deepseek_options(request_data)
         try:
             self._request(request_data)
             return True

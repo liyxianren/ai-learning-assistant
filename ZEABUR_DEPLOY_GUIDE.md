@@ -76,7 +76,7 @@ server {
 environment=FLASK_ENV="production"
 ```
 
-**问题**：supervisord 默认会继承父进程的所有环境变量，`environment=` 只是追加/覆盖指定项。这里只设置了 `FLASK_ENV`，Zeabur 注入的 `CHATGLM_API_KEY` 等变量能正常传递给 gunicorn，所以实际可以工作。
+**问题**：supervisord 默认会继承父进程的所有环境变量，`environment=` 只是追加/覆盖指定项。这里只设置了 `FLASK_ENV`，Zeabur 注入的 `DEEPSEEK_API_KEY` 等变量能正常传递给 gunicorn，所以实际可以工作。
 
 但更安全的写法是同时设置 `CORS_ORIGIN`，避免生产环境下 CORS 阻止请求：
 
@@ -169,7 +169,7 @@ backend/           （所有后端文件，不含 .env 和 app.db）
 
 | 变量名 | 值 | 说明 |
 |--------|-----|------|
-| `CHATGLM_API_KEY` | `你的智谱API密钥` | 从 [智谱开放平台](https://open.bigmodel.cn/) 获取 |
+| `DEEPSEEK_API_KEY` | `你的DeepSeek API密钥` | 从 DeepSeek 平台获取 |
 | `JWT_SECRET` | `自定义强密码字符串` | 生产环境必须修改，不能用默认值 |
 
 #### 推荐变量
@@ -183,9 +183,11 @@ backend/           （所有后端文件，不含 .env 和 app.db）
 
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
-| `CHATGLM_API_URL` | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | 智谱 API 地址 |
-| `CHATGLM_MODEL` | `glm-4.7-flashx` | 对话模型 |
-| `MULTIMODAL_API_KEY` | （空，回退用 CHATGLM_API_KEY） | 多模态模型密钥 |
+| `DEEPSEEK_API_URL` | `https://api.deepseek.com/chat/completions` | DeepSeek API 地址 |
+| `DEEPSEEK_MODEL` | `deepseek-v4-pro` | 对话模型 |
+| `DEEPSEEK_ENABLE_THINKING` | `true` | 是否启用思考模式 |
+| `DEEPSEEK_REASONING_EFFORT` | `high` | 思考强度 |
+| `MULTIMODAL_API_KEY` | （可选，单独配置视觉模型） | 多模态模型密钥 |
 | `MULTIMODAL_MODEL` | `gpt-4-vision-preview` | 图像识别模型 |
 | `REQUEST_TIMEOUT` | `120` | 请求超时秒数 |
 | `RATE_LIMIT_MAX_REQUESTS` | `30` | 每分钟最大请求数 |
@@ -193,7 +195,8 @@ backend/           （所有后端文件，不含 .env 和 app.db）
 **批量编辑**：点击 **Edit Raw Environment Variables**，粘贴以下内容：
 
 ```env
-CHATGLM_API_KEY=你的智谱API密钥
+DEEPSEEK_API_KEY=你的DeepSeek API密钥
+DEEPSEEK_MODEL=deepseek-v4-pro
 JWT_SECRET=你的JWT密钥
 CORS_ORIGIN=*
 ```

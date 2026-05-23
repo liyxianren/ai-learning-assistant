@@ -753,12 +753,22 @@ body {
     border-bottom: 2px solid var(--primary-light);
 }
 
+.solution-reasoning,
 .solution-thinking,
 .solution-steps,
 .solution-answer,
 .solution-summary {
     font-size: var(--font-size-md);
     line-height: 1.8;
+    color: var(--text-secondary);
+}
+
+.solution-reasoning {
+    padding: var(--spacing-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--secondary-color);
+    border-radius: var(--border-radius-md);
     color: var(--text-secondary);
 }
 

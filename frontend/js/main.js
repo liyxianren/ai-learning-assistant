@@ -71,6 +71,7 @@ const DOM = {
     parseDifficulty: document.getElementById('parse-difficulty'),
     
     solutionCard: document.getElementById('solution-card'),
+    solutionReasoning: document.getElementById('solution-reasoning'),
     solutionThinking: document.getElementById('solution-thinking'),
     solutionSteps: document.getElementById('solution-steps'),
     solutionAnswer: document.getElementById('solution-answer'),
@@ -557,6 +558,12 @@ function showParseResult() {
 function showSolutionResult() {
     const solution = AppState.solution || {};
 
+    const reasoningText = normalizeSolutionText(
+        solution.reasoning || solution.reasoningContent || solution.reasoning_content
+    );
+    DOM.solutionReasoning.innerHTML = renderMarkdown(reasoningText || '暂未返回模型思考过程。');
+    DOM.solutionReasoning.classList.add('markdown-content');
+
     const thinkingText = normalizeSolutionText(solution.thinking);
     DOM.solutionThinking.innerHTML = renderMarkdown(thinkingText || '暂未生成解题思路，请重试。');
     DOM.solutionThinking.classList.add('markdown-content');
@@ -601,6 +608,7 @@ function showSolutionResult() {
     DOM.solutionSummary.classList.add('markdown-content');
 
     // markdown 渲染完成后，再对数学公式进行排版
+    renderMathInContainer(DOM.solutionReasoning);
     renderMathInContainer(DOM.solutionThinking);
     renderMathInContainer(DOM.solutionSteps);
     renderMathInContainer(DOM.solutionAnswer);

@@ -43,12 +43,23 @@ class Config:
     )
     MULTIMODAL_MODEL = os.getenv("MULTIMODAL_MODEL", "glm-4.6v-flashx")
 
-    CHATGLM_API_KEY = os.getenv("CHATGLM_API_KEY", "")
-    CHATGLM_API_URL = os.getenv(
-        "CHATGLM_API_URL", "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", os.getenv("CHATGLM_API_KEY", ""))
+    DEEPSEEK_API_URL = os.getenv(
+        "DEEPSEEK_API_URL",
+        os.getenv("CHATGLM_API_URL", "https://api.deepseek.com/chat/completions"),
     )
-    CHATGLM_MODEL = os.getenv("CHATGLM_MODEL", "glm-4.7-flashx")
-    CHATGLM_ENABLE_THINKING = _to_bool(os.getenv("CHATGLM_ENABLE_THINKING"), False)
+    DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", os.getenv("CHATGLM_MODEL", "deepseek-v4-pro"))
+    DEEPSEEK_ENABLE_THINKING = _to_bool(
+        os.getenv("DEEPSEEK_ENABLE_THINKING", os.getenv("CHATGLM_ENABLE_THINKING")),
+        True,
+    )
+    DEEPSEEK_REASONING_EFFORT = os.getenv("DEEPSEEK_REASONING_EFFORT", "high")
+
+    # Backward-compatible config aliases for older service imports and deployments.
+    CHATGLM_API_KEY = DEEPSEEK_API_KEY
+    CHATGLM_API_URL = DEEPSEEK_API_URL
+    CHATGLM_MODEL = DEEPSEEK_MODEL
+    CHATGLM_ENABLE_THINKING = DEEPSEEK_ENABLE_THINKING
 
     REQUEST_TIMEOUT = _to_int(os.getenv("REQUEST_TIMEOUT"), 120)
     MAX_IMAGE_SIZE = _to_int(os.getenv("MAX_IMAGE_SIZE"), 5 * 1024 * 1024)

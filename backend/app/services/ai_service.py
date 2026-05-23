@@ -1,4 +1,4 @@
-"""AI service layer that combines multimodal and ChatGLM models."""
+"""AI service layer that combines multimodal OCR and DeepSeek chat models."""
 
 from __future__ import annotations
 
@@ -51,9 +51,9 @@ class AIService:
         return str(content).strip()
 
     def _resolve_multimodal_config(self) -> tuple[str, str, str]:
-        # 图像识别固定走 ChatGLM 4.6V 通道，避免误用 OpenAI 配置
-        api_key = current_app.config.get("CHATGLM_API_KEY")
-        api_url = current_app.config.get("CHATGLM_API_URL")
+        # 图像识别需要视觉模型，和 DeepSeek 文本对话模型分开配置。
+        api_key = current_app.config.get("MULTIMODAL_API_KEY")
+        api_url = current_app.config.get("MULTIMODAL_API_URL")
         model = current_app.config.get("MULTIMODAL_MODEL", "glm-4.6v-flashx")
         return (api_key or "", api_url or "", model)
 
@@ -116,7 +116,7 @@ class AIService:
         return chatglm_service.parse_solution_content(content)
 
     def health_check(self) -> Dict[str, bool]:
-        result = {"multimodal": False, "chatglm": False}
+        result = {"multimodal": False, "deepseek": False}
 
         api_key, api_url, model = self._resolve_multimodal_config()
 
@@ -150,7 +150,7 @@ class AIService:
             except requests.RequestException:
                 result["multimodal"] = False
 
-        result["chatglm"] = chatglm_service.health_check()
+        result["deepseek"] = chatglm_service.health_check()
         return result
 
 

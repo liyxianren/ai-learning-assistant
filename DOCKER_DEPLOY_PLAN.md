@@ -177,9 +177,11 @@ backend/app/**/__pycache__
 | 变量名 | 必填 | 说明 |
 |--------|------|------|
 | `FLASK_ENV` | 否 | 默认 `production`（supervisord 中已设置） |
-| `CHATGLM_API_KEY` | 是 | 智谱 API 密钥 |
-| `CHATGLM_API_URL` | 否 | 默认已内置 |
-| `CHATGLM_MODEL` | 否 | 默认 `glm-4.7-flashx` |
+| `DEEPSEEK_API_KEY` | 是 | DeepSeek API 密钥 |
+| `DEEPSEEK_API_URL` | 否 | 默认 `https://api.deepseek.com/chat/completions` |
+| `DEEPSEEK_MODEL` | 否 | 默认 `deepseek-v4-pro` |
+| `DEEPSEEK_ENABLE_THINKING` | 否 | 默认 `true` |
+| `DEEPSEEK_REASONING_EFFORT` | 否 | 默认 `high` |
 | `JWT_SECRET` | 是 | 生产环境必须修改 |
 | `CORS_ORIGIN` | 否 | 同容器部署可设为 `*` |
 
@@ -194,7 +196,7 @@ backend/app/**/__pycache__
 3. **替换** `Dockerfile` — 合并前后端的单容器构建
 4. **修改** `.dockerignore` — 包含 backend/，排除敏感文件
 5. **删除** `backend/Dockerfile` — 不再需要单独后端镜像
-6. **本地验证** `docker build -t ai-learning . && docker run -p 8080:80 -e CHATGLM_API_KEY=xxx ai-learning`
+6. **本地验证** `docker build -t ai-learning . && docker run -p 8080:80 -e DEEPSEEK_API_KEY=xxx ai-learning`
 7. **推送 Zeabur** — 在 Zeabur 控制台配置环境变量
 
 ## 验证清单
