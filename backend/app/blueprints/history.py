@@ -50,6 +50,31 @@ def list_history():
     )
 
 
+@bp.post("")
+@jwt_required()
+def create_history():
+    payload = request.get_json(silent=True) or {}
+    question = str(payload.get("question") or "").strip()
+    parse_result = payload.get("parseResult")
+    solution = payload.get("solution")
+
+    if not question or not isinstance(parse_result, dict) or not isinstance(solution, dict):
+        return jsonify({"success": False, "error": "缺少历史记录数据"}), 400
+
+    user_id = get_jwt_identity()
+    record = History(
+        user_id=user_id,
+        username=payload.get("username"),
+        question=question,
+        parse_result=parse_result,
+        solution=solution,
+    )
+    db.session.add(record)
+    db.session.commit()
+
+    return jsonify({"success": True, "data": {"record": record.to_dict()}}), 201
+
+
 @bp.get("/<string:record_id>")
 @jwt_required()
 def get_history(record_id: str):

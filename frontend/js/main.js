@@ -371,7 +371,7 @@ async function handleSubmit() {
 
         await performParsing();
         await performSolving();
-        saveToHistory();
+        await saveToHistory();
         
     } catch (error) {
         console.error('处理失败:', error);
@@ -797,7 +797,29 @@ async function loadHistoryFromServer() {
     }
 }
 
-function saveToHistory() {
+async function saveToHistory() {
+    if (UserManager.isLoggedIn()) {
+        try {
+            const response = await UserManager.fetchApi('/api/history', {
+                method: 'POST',
+                headers: UserManager.getHeaders(),
+                body: JSON.stringify({
+                    question: AppState.recognizedText,
+                    parseResult: AppState.parseResult,
+                    solution: AppState.solution,
+                    username: AppState.currentUser?.username
+                })
+            });
+            const result = await response.json();
+            if (result.success) {
+                await loadHistoryFromServer();
+                return;
+            }
+        } catch (error) {
+            console.error('保存服务端历史记录失败:', error);
+        }
+    }
+
     const item = {
         id: Date.now().toString(),
         timestamp: new Date().toISOString(),
