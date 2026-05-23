@@ -507,8 +507,9 @@ async function performSolving() {
     let buffer = '';
     let reasoningText = '';
     let contentText = '';
+    let streamDone = false;
 
-    while (true) {
+    while (!streamDone) {
         const { value, done } = await reader.read();
         if (done) break;
 
@@ -521,6 +522,7 @@ async function performSolving() {
             if (!event) continue;
             if (event.done) {
                 buffer = '';
+                streamDone = true;
                 break;
             }
             if (event.error) {

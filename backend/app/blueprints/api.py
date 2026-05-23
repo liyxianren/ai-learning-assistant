@@ -124,10 +124,10 @@ def solve_stream():
     def generate():
         try:
             for chunk in pipeline_service.solve_stream(text, parse_result):
-                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\\n\\n"
-            yield "data: [DONE]\\n\\n"
+                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
         except Exception as exc:  # noqa: BLE001
-            yield f"data: {json.dumps({'error': str(exc)}, ensure_ascii=False)}\\n\\n"
+            yield f"data: {json.dumps({'error': str(exc)}, ensure_ascii=False)}\n\n"
 
     return Response(
         generate(),
